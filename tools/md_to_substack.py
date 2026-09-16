@@ -334,6 +334,28 @@ CLEARANCE_RE = re.compile(
     r'|\b(?:consulted|accessed|retrieved)\s+(?:on\s+)?(?:\d|20\d\d|[A-Z][a-z]+ \d)',   # consulted 7 Sept / on 2026
     re.I)
 
+# A reference to a file INSIDE THE DESK is scaffold that reached the reader, the same class as a
+# clearance date: a reader cannot open `projects/being-good/facts.md`, and the path rots when the
+# desk moves (Eric, 2026-09-16: "the footnotes should never reference files internal to the
+# writing desk"). Found that day on a live post of Both Ends of the Leash, whose Pickle footnote
+# cited the desk's facts ledger, and in two MuffinLabs footnotes (`docs/STYLES.md`,
+# `assets/figures.py`). Two shapes: a relative path whose first segment is one of the desk's own
+# directories, and a desk ledger named by its filename. Matched against text with href/src/alt
+# attribute values removed, so a public URL to the same document (a reader CAN follow that) and an
+# alt that transcribes a filename shown in a picture both pass.
+DESK_PATH_RE = re.compile(
+    r'(?<![\w/.:-])(?:projects|books|pieces|talks|styles|references|publishing|framework|assets'
+    r'|docs|tools|skills|templates|log|DASHBOARD\.d)/[\w.<>*-]'
+    r'|(?<![\w/.-])(?:facts|notes|outline|sources|corrections|brief|pieces|writings|README)\.md\b')
+
+
+def desk_path_in(html):
+    """The first desk-internal reference in reader HTML, or None. Attribute values are not reader
+    text (a link's target is a URL; an alt transcribes the picture), so they are removed first."""
+    m = DESK_PATH_RE.search(re.sub(r'\s(?:href|src|alt)="[^"]*"', '', html))
+    return m.group(0) if m else None
+
+
 UNVERIFIED_RE = re.compile(
     r'\b(verify|verifying|todo|to-do|tk|fixme|xxx)\b'
     r'|\bcheck\b(?!ed|ing)|\bconfirm\b(?!ed|ing)|\bpin\b(?!ned)'
@@ -564,14 +586,16 @@ def parse_blocks(piece_dir):
     # checking is DONE reads as clean to every one of them. An ISO date is the tell — reader
     # prose dates a source "(2002)" or "March 10, 1967", never 2026-09-07 — so it refuses on
     # the date shape and on consulted/accessed/retrieved + a date, wherever it is.
-    residual = [n for n, c in ordered if re.search(r'verify', c, re.I) or CLEARANCE_RE.search(c)]
+    residual = [n for n, c in ordered
+                if re.search(r'verify', c, re.I) or CLEARANCE_RE.search(c) or desk_path_in(c)]
     # An image's alt text is exempt: it TRANSCRIBES what is in the picture, verbatim and in
     # quotation marks (docs/ALT-TEXT.md), and a picture of a ledger or a receipt carries ISO
     # dates. A transcription is not scaffold — the date is the image's, not the desk's. Found
     # 2026-09-14 when A Writing Desk That Keeps Its Receipts' hero (a receipt tape of
     # timestamped commits) refused to compose on the dates its alt had to carry.
     _no_alt = lambda b: re.sub(r'\salt="[^"]*"', ' alt=""', b)
-    residual += ['body#%d' % i for i, b in enumerate(out) if CLEARANCE_RE.search(_no_alt(b))]
+    residual += ['body#%d' % i for i, b in enumerate(out)
+                 if CLEARANCE_RE.search(_no_alt(b)) or desk_path_in(b)]
     sources = {'body': out_src, 'fns': [fn_src[n] for n, _c in ordered]}
     return out, ordered, stripped, residual, unverified, fn_issues, sources
 
@@ -980,7 +1004,9 @@ def main():
         print(f"WARNING: {len(residual)} block(s) still carry verify or clearance language after "
               f"cleaning: {residual}. A 'verify' note: verify the claim, then move the note behind "
               f"a † (or delete it). Clearance language (an ISO date, 'consulted 2026-09-07'): the "
-              f"record belongs in publish.yaml -> verified:, not in the reader's footnote.")
+              f"record belongs in publish.yaml -> verified:, not in the reader's footnote. A desk "
+              f"path (projects/…, facts.md, assets/figures.py): a reader cannot open it — cite a "
+              f"public URL or say it in words, and keep provenance in publish.yaml.")
         if not allow_verify:
             print("Refusing to write output. Re-run with --allow-verify to override.")
             sys.exit(2)

@@ -464,7 +464,8 @@ def main():
     if residual:
         sys.exit('REFUSING: %d block(s) still carry verify or clearance language after cleaning: %s\n'
                  '  A verify note: verify the claim, then put the note behind a dagger. Clearance '
-                 'language (an ISO date, "consulted 2026-09-07"): move it to publish.yaml -> verified:.'
+                 'language (an ISO date, "consulted 2026-09-07"): move it to publish.yaml -> verified:. A desk '
+                 'path (projects/..., facts.md): a reader cannot open it; cite a public URL or say it in words.'
                  % (len(residual), residual))
     if fn_issues['nested']:
         sys.exit('REFUSING: footnote reference(s) inside a footnote: %s. These publish as a '

@@ -215,7 +215,7 @@ def main():
 
     body, notes, images, guards = build(piece)
     if guards['residual']:
-        refusals.append(f"clearance or verify language left in reader text: {guards['residual']}")
+        refusals.append(f"clearance, verify or desk-path language left in reader text: {guards['residual']}")
     if guards['unverified']:
         refusals.append(f"unverified markers stripped from footnotes: {guards['unverified']}")
     for k in ('undefined', 'unreferenced', 'duplicated', 'nested'):

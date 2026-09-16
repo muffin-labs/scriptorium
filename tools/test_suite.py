@@ -5151,6 +5151,33 @@ def unit_tags(tmp):
 
 
 
+# ---------------------------------------------------------------- unit: desk paths in reader text
+def unit_desk_paths(tmp):
+    """A reader cannot open a file inside the desk (Eric, 2026-09-16: "the footnotes should never
+    reference files internal to the writing desk"). A live footnote cited the facts ledger by path;
+    two more cited `docs/STYLES.md` and `assets/figures.py`. Every converter now refuses."""
+    print("\n-- converter: desk paths never reach the reader --------------------")
+    import md_to_substack as m2s
+    def residual(body, notes):
+        d = os.path.join(tmp, 'deskpath'); os.makedirs(d, exist_ok=True)
+        open(os.path.join(d, 'publish.yaml'), 'w').write('title: T\nsubtitle: S\n')
+        open(os.path.join(d, 'draft.md'), 'w').write('# T\n*header: projects/x/facts.md is fine up here*\n\n---\n\n'
+                                                     + body + '\n\n' + notes + '\n')
+        return m2s.parse_blocks(d)[3]
+    check('desk paths: a footnote citing the facts ledger by path is refused',
+          residual('Body.[^p]', '[^p]: Drawn from the ledger in `projects/being-good/facts.md`.') == ['p'])
+    check('desk paths: a ledger named by filename is refused, in the body too',
+          residual('As notes.md says.', '') == ['body#0'])
+    check('desk paths: a framework path in a footnote is refused',
+          residual('Body.[^s]', "[^s]: Documented in the framework's `docs/STYLES.md`.") == ['s'])
+    check('desk paths: a public URL to the same document passes, and so does the header note',
+          residual('Body.[^s]', '[^s]: Documented in [the guide](https://github.com/o/r/blob/main/docs/STYLES.md).') == [])
+    check('desk paths: an alt that transcribes a filename in the picture passes; so does and/or',
+          residual('![A tab labeled "facts.md"](https://x.test/a.png)\n\nRuns and/or conditions, 3/4.', '') == [])
+    check('desk paths: a note behind a dagger is stripped before it is judged',
+          residual('Body.[^d]', '[^d]: A source. † internal: see notes.md §H.') == [])
+
+
 # ---------------------------------------------------------------- unit: publication ownership
 def unit_publication_ownership(tmp):
     """Ownership both ways, projects, house files, and a publication's deity conventions (2026-09-15).
@@ -6300,6 +6327,7 @@ def main():
         unit_tags(tmp)
         unit_publications(tmp)
         unit_publication_ownership(tmp)
+        unit_desk_paths(tmp)
         unit_substack_tags(tmp)
         unit_linkedin(tmp)
         unit_linkedin_post(tmp)

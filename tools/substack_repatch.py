@@ -93,7 +93,8 @@ def main():
               "trusting either.")
         sys.exit(5)
         print(f"WARNING: {len(residual)} footnote(s) still carry verify or clearance language (an ISO date, 'consulted …') after cleaning: "
-              f"{residual}. Resolve the note (verify -> move behind a †, or delete) before republishing.")
+              f"{residual}. Resolve the note (verify -> move behind a †, or delete; a desk path such as "
+              f"projects/…/facts.md -> a public URL or plain words) before republishing.")
         print("Refusing to write output.")
         sys.exit(2)
 
