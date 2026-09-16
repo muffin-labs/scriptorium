@@ -3640,6 +3640,146 @@ def unit_talk_tags(tmp):
           code == 0 and 'no tags' in log, log.strip()[:200])
 
 
+def unit_audit_tags(tmp):
+    """outlet_audit compares every text's tags to what each outlet carries (2026-09-16).
+
+    A tag added to a live text reaches no outlet by itself — the store record and the Substack
+    post are separate writes — and on 2026-09-15 two texts were found publicly untagged by a
+    person looking at a page, with every check here green. These cases pin the comparison down
+    without the network: the store index is a fixture and the Substack reader is injected.
+
+    The last case is the fault the first real run found in the forward check itself: a WAITING
+    outlet answers a scheduled post's address with a 200 teaser, which was counted present, so
+    the tag gate asked for tags on a post that did not exist yet.
+    """
+    print("\n-- outlet audit: tags, on the store and on Substack -----------------")
+    import io, contextlib
+    import outlet_audit as oa
+    import publications as pb
+    import tags as tg
+
+    check('audit tags: order is not drift, case is not drift',
+          oa.tag_drift(['Alpha', 'Beta'], ['beta', 'alpha']) == ([], []))
+    check('audit tags: missing and extra are both named',
+          oa.tag_drift(['Alpha', 'Beta'], ['Alpha', 'Stray']) == (['Beta'], ['Stray']))
+
+    # ---- the store index
+    root = os.path.join(tmp, 'atdesk')
+    for rel_ in ('pieces/shared', 'pieces/lone', 'pieces/bare', 'pieces/odd', 'pieces/away', 'talks/shared'):
+        os.makedirs(os.path.join(root, rel_), exist_ok=True)
+    os.makedirs(os.path.join(root, 'publishing'), exist_ok=True)
+    open(os.path.join(root, 'publishing', 'tags.yaml'), 'w').write(
+        'tags:\n  - tag: alpha\n    label: Alpha\n    about: a\n'
+        '  - tag: beta\n    label: Beta\n    about: b\n')
+    w = lambda rel_, text: open(os.path.join(root, rel_), 'w').write(text)
+    w('pieces/shared/publish.yaml', 'title: Shared\ntags:\n  - alpha\n')
+    w('talks/shared/talk.yaml', 'title: Shared\ntags:\n  - alpha\n  - beta\n')
+    w('pieces/lone/publish.yaml', 'title: Lone\ntags:\n  - alpha\n')
+    w('pieces/bare/publish.yaml', 'title: Bare\n')
+    w('pieces/odd/publish.yaml', 'title: Odd\ntags:\n  - nope\n')
+    w('pieces/away/publish.yaml', 'title: Away\ntags:\n  - alpha\n')
+    tag = lambda t, l: {'tag': t, 'label': l}
+    index = {'pieces': [
+        {'slug': 'shared', 'kind': 'piece', 'outlets': ['site'], 'tags': [tag('alpha', 'Alpha')]},
+        {'slug': 'shared', 'kind': 'talk', 'outlets': ['site'], 'tags': [tag('alpha', 'Alpha')]},
+        {'slug': 'lone', 'kind': 'piece', 'outlets': ['site'], 'tags': [tag('alpha', 'Old Alpha')]},
+        {'slug': 'bare', 'kind': 'piece', 'outlets': ['site'], 'tags': [tag('alpha', 'Alpha')]},
+        {'slug': 'odd', 'kind': 'piece', 'outlets': ['site']},
+        {'slug': 'ghost', 'kind': 'piece', 'outlets': ['site'], 'tags': [tag('alpha', 'Alpha')]},
+        {'slug': 'lone', 'kind': 'talk', 'outlets': ['site']},
+        {'slug': 'away', 'kind': 'piece', 'outlets': ['elsewhere']},
+    ]}
+    vocabs = tg.Vocabularies(root, None, None)
+    n, found = oa.store_tag_drift(index, root, None, vocabs)
+    by = {f['ref']: f for f in found}
+    check('audit tags: the store check reads a TALK entry against talks/, not its essay',
+          'talks/shared' in by and by['talks/shared']['missing'] == ['beta'], str(by))
+    check('audit tags: an index entry that matches the desk is not a finding',
+          'pieces/shared' not in by, str(by))
+    check('audit tags: a label the vocabulary renamed is drift, though the ids match',
+          by.get('pieces/lone', {}).get('relabeled') == [('alpha', 'Old Alpha', 'Alpha')], str(by))
+    check('audit tags: tags on the store that the desk dropped are extra',
+          by.get('pieces/bare', {}).get('extra') == ['alpha'], str(by))
+    check('audit tags: a desk tag outside the vocabulary is reported, not compared',
+          'nope' in by.get('pieces/odd', {}).get('problem', ''), str(by))
+    check('audit tags: a slug the desk does not hold, and a kind it does not hold, are skipped',
+          n == 6 and not any('ghost' in r for r in by), f'checked {n}, {sorted(by)}')
+    n2, found2 = oa.store_tag_drift(index, root, None, vocabs, outlets=['elsewhere'])
+    check('audit tags: --outlet limits the store check to entries published there',
+          n2 == 1 and [f['ref'] for f in found2] == ['pieces/away'], f'{n2} {found2}')
+
+    # ---- Substack, the reader injected
+    sroot = os.path.join(tmp, 'atsub'); sd = os.path.join(sroot, 'pieces', 'p')
+    os.makedirs(sd, exist_ok=True); os.makedirs(os.path.join(sroot, 'publishing'), exist_ok=True)
+    open(os.path.join(sroot, 'publishing', 'outlets.yaml'), 'w').write(
+        'outlets:\n  sub:\n    reader_base: https://x.substack.com/p/\n    account_handle: tagger\n')
+    open(os.path.join(sroot, 'publishing', 'tags.yaml'), 'w').write(
+        'tags:\n  - tag: discernment\n    label: Discernment\n    about: b\n'
+        '  - tag: canon\n    label: The Canon\n    about: c\n    substack: false\n')
+    open(os.path.join(sd, 'publish.yaml'), 'w').write(
+        'title: P\noutlets:\n  - sub\npublished_at: 2026-09-01\n'
+        'post_url: https://x.substack.com/publish/post/42\ntags:\n  - discernment\n  - canon\n')
+    seen = []
+
+    def reader(now):
+        def f(host, url, key):
+            seen.append(url)
+            if isinstance(now, Exception):
+                raise now
+            return now
+        return f
+    job = [('p', sd, 'https://x.substack.com/p/p')]
+    n, found, unr = oa.substack_tag_drift(job, fetch_tags=reader(['Discernment']))
+    check('audit tags: a `substack: false` tag is not expected on Substack',
+          n == 1 and not found and not unr, str((found, unr)))
+    check('audit tags: the post is read at the address the forward check found live',
+          seen[-1] == 'https://x.substack.com/p/p', str(seen))
+    _n, found, _u = oa.substack_tag_drift(job, fetch_tags=reader([]))
+    check('audit tags: a post with none of its tags reports them missing',
+          found and found[0]['missing'] == ['Discernment'], str(found))
+    _n, found, _u = oa.substack_tag_drift(job, fetch_tags=reader(['Discernment', 'Stray']))
+    check('audit tags: a post carrying a tag the desk does not is extra',
+          found and found[0]['extra'] == ['Stray'], str(found))
+    _n, found, unr = oa.substack_tag_drift(job, fetch_tags=reader(OSError('down')))
+    check('audit tags: an unreadable post is "not checked", never "matches"',
+          unr == ['p'] and not found, str((found, unr)))
+    open(os.path.join(sd, 'publish.yaml'), 'a').write('  - nope\n')
+    _n, found, _u = oa.substack_tag_drift(job, fetch_tags=reader(['Discernment']))
+    check('audit tags: a piece its own tag tool refuses is reported, not skipped',
+          found and 'nope' in found[0].get('problem', ''), str(found))
+
+    # ---- the teaser: a WAITING outlet's 200 before the moment is not the post
+    troot = os.path.join(tmp, 'atteaser'); td = os.path.join(troot, 'pieces', 'early')
+    os.makedirs(td, exist_ok=True); os.makedirs(os.path.join(troot, 'publishing'), exist_ok=True)
+    open(os.path.join(troot, 'publishing', 'outlets.yaml'), 'w').write(
+        'outlets:\n'
+        '  site:\n    reader_base: https://site.test/blog/\n    manifest_url_key: blog_url\n'
+        '    on_schedule: immediate\n'
+        '  sub:\n    reader_base: https://sub.test/p/\n    on_schedule: at_moment\n')
+    open(os.path.join(td, 'publish.yaml'), 'w').write(
+        'title: Early\npublish_at: 2099-01-01 09:00 America/New_York\npublished_at: 2026-09-01\n'
+        'outlets:\n  - site\n  - sub\nblog_url: https://site.test/blog/early\n'
+        'scheduled:\n  sub:\n    at: 2099-01-01 09:00 EST\n    set: 2026-09-01\n'
+        '    where: "the platform\'s own scheduler"\n    approved: "the suite"\n')
+    real_fetch, argv, cwd = oa.fetch, sys.argv, os.getcwd()
+    oa.fetch = lambda url, timeout=20: (200, '<html><title>Early</title>teaser</html>', url.split('?')[0])
+    out, code = io.StringIO(), None
+    try:
+        os.chdir(troot)
+        sys.argv = ['outlet_audit.py', '--no-reverse', '--no-tags']
+        with contextlib.redirect_stdout(out):
+            try:
+                oa.main()
+            except SystemExit as e:
+                code = e.code
+    finally:
+        oa.fetch, sys.argv = real_fetch, argv
+        os.chdir(cwd)
+    text = out.getvalue()
+    check('audit tags: a scheduled copy answering 200 before its moment is SCHEDULED, not present',
+          code == 0 and '1 present, 1 scheduled, 0 missing' in text, f'exit {code}: {text[-400:]}')
+
+
 def unit_store(tmp):
     """The two publishing tools, exercised without touching AWS.
 
@@ -6149,6 +6289,7 @@ def main():
         unit_deck(tmp)
         unit_dc(tmp)
         unit_talk_tags(tmp)
+        unit_audit_tags(tmp)
         unit_store(tmp)
         unit_tags(tmp)
         unit_publications(tmp)

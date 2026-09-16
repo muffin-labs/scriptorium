@@ -1593,6 +1593,15 @@ outlet in the list, every time, and say which ones you confirmed.
    direction that can see a page the desk never produced. **Exit 3 is drift; exit 2 is "could not
    reach", which never wears the same face as a pass.**
 
+   **It compares TAGS too, on every run** (2026-09-16). Every text on the store index — pieces and
+   talks, tag ids and labels, from one fetch of `index.json` — and every Substack post the forward
+   check just found live, read through `substack_tags`' own plan so the two cannot disagree about
+   what a post should carry. **A tag added to a live text reaches no outlet by itself**: the store
+   record and the Substack post are separate writes, and on 2026-09-15 two texts were found
+   publicly untagged by a person looking at a page while every check here was green. A finding
+   reads `TAGS <ref> on <where>: missing … / extra … / <tag> reads 'X', the vocabulary says 'Y'`;
+   the fix is the re-publish it names. `--no-tags` skips it.
+
    Two things it deliberately does *not* treat as failures: a piece that declares an outlet but
    **is not published yet** (reported and skipped — declaration is intent, publication is fact),
    and a legacy manifest that opts in with `site: true` instead of an `outlets:` list (counted,

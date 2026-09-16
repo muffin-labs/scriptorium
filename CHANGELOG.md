@@ -21,6 +21,18 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **`outlet_audit.py` compares tags.** Every text on the store index — pieces and talks, tag ids
+  and labels, from one fetch — and every Substack post the forward check just found live, through
+  `substack_tags`' own plan, against the desk. A finding is `TAGS … missing / extra / relabeled`
+  and exits 3; an unreadable tag source exits 2 ("not checked" is not "matches"). `--no-tags`
+  skips it; `--store` names the store config (default: `store.yaml` beside `--config`). A tag
+  added to a live text reaches no outlet by itself, and two texts had been found publicly
+  untagged by a person looking at a page. MINOR.
+- **`outlet_audit.py` no longer counts a scheduled copy as present.** A waiting outlet
+  (`on_schedule: at_moment`) whose moment is still ahead is judged by its schedule even when its
+  address answers 200 — Substack serves a scheduled post's URL with a teaser. It reads
+  *scheduled* (or *NOT SCHEDULED*) as a missing copy always did. PATCH.
+
 - **`prepush.py` builds its CI venv on Windows.** `venv_python` looked for the interpreter at
   `bin/python`, which only exists on POSIX; native Windows Python's `venv` module writes
   `Scripts/python.exe`, so every push failed with a `FileNotFoundError` before CI ever ran. PATCH.

@@ -27,6 +27,12 @@ WHAT IT CHECKS
             site repo, so a piece can go live with its link preview 404 — on 2026-09-11 one
             of 33 did, and a shared link showed no image. Nothing else looks.
 
+  tags      every text's tags on the STORE INDEX (what every store-backed site reads —
+            pieces and talks, tag ids AND labels, one fetch) and on each live SUBSTACK post
+            (through substack_tags' own plan and reader) match the desk. A tag added to a
+            live text reaches no outlet by itself; on 2026-09-15 two texts were found publicly
+            untagged by a person looking at a page. `--no-tags` skips it.
+
 WHAT IT REFUSES TO CONCLUDE
 
   That a piece is fine because it was not checked. "Could not reach" is its own exit
@@ -53,7 +59,7 @@ CONFIG (instance-side; the framework holds no URLs)
 
 USAGE
   python3 outlet_audit.py [--config publishing/outlets.yaml] [--pieces pieces]
-                          [--outlet NAME] [--no-reverse] [--quiet]
+                          [--outlet NAME] [--no-reverse] [--no-tags] [--store FILE] [--quiet]
 
 EXIT
   0 every declared outlet has its piece      3 drift (something missing or undeclared)
@@ -427,6 +433,141 @@ def content_drift(piece_dir, page_html, canonical_outlet=False, footnote_marker=
     return {'paragraphs': len(want), 'missing': missing}
 
 
+# ------------------------------------------------------------------ tags
+#
+# WHY (2026-09-15, twice in one day). A tag added to a live text reaches no outlet by itself:
+# the store record and the Substack post are separate writes, and nothing went back. So
+# *Love Is Not a Metric Space* carried `modeling-limits` on the desk for four days while its
+# blog card showed no tags and its Substack post carried none at all — and a talk went live
+# with no tags anywhere, because the desk could not yet express them. Both were found by a
+# person looking at a page. Every other check here passed, because none of them looked at
+# tags. This is the comparison that does, on every run, without being remembered.
+
+def tag_drift(want, now):
+    """-> (missing, extra), case-insensitive. ORDER IS NOT DRIFT: every writer emits a
+    publication's vocabulary order, so a live list in another order means a reordered
+    vocabulary, not a stale post."""
+    lw, wl = {x.lower() for x in now}, {x.lower() for x in want}
+    return [x for x in want if x.lower() not in lw], [x for x in now if x.lower() not in wl]
+
+
+def desk_tag_labels(text_dir, pubs, vocabs):
+    """-> ({tag: label} in vocabulary order, problem) for one desk text, piece or talk."""
+    import publications as pb
+    import tags as tagvocab
+    man = pb.read_manifest(text_dir) or {}
+    names, problem = tagvocab.tags_of(man)
+    if problem:
+        return None, problem
+    if not names:
+        return {}, None
+    pid, pprobs = pb.of_piece(man, pubs)
+    if vocabs.per_publication and not pid:
+        return None, '; '.join(pprobs) or 'names no publication'
+    vocab, vprobs = vocabs.get(pid)
+    if vprobs or vocab is None:
+        return None, 'its tag vocabulary is missing or malformed'
+    unknown = [t for t in names if t not in vocab]
+    if unknown:
+        return None, f"not in its vocabulary: {', '.join(unknown)}"
+    return {t: vocab[t]['label'] for t in tagvocab.ordered(names, vocab)}, None
+
+
+def store_tag_drift(index, root, pubs, vocabs, outlets=None):
+    """Every store index entry the desk holds, compared tag for tag and label for label.
+
+    The index is what every store-backed site reads a text's tags from, so this one
+    comparison covers all of them, pieces and talks alike, from one fetch. A label renamed in
+    the vocabulary is drift too: the ids still match and the reader still sees the old word.
+    Pure — the index is passed in. `outlets` limits it to entries published to those.
+    -> (checked, findings); a finding is {ref, missing, extra, relabeled} or {ref, problem}."""
+    import corpus
+    checked, findings = 0, []
+    for e in (index or {}).get('pieces') or []:
+        if outlets and not set(e.get('outlets') or []) & set(outlets):
+            continue
+        kind = e.get('kind', 'piece')
+        d = corpus.find(root, str(e.get('slug') or ''), prefer=kind)
+        if not d or corpus.kind_of(d) != kind:
+            continue                       # a slug the desk does not hold is the reverse check's
+        ref = corpus.rel(root, d)
+        want, problem = desk_tag_labels(d, pubs, vocabs)
+        checked += 1
+        if problem:
+            findings.append({'ref': ref, 'problem': problem})
+            continue
+        have = {t['tag']: t.get('label') for t in (e.get('tags') or [])
+                if isinstance(t, dict) and t.get('tag')}
+        missing = [t for t in want if t not in have]
+        extra = [t for t in have if t not in want]
+        relabeled = [(t, have[t], want[t]) for t in want if t in have and have[t] != want[t]]
+        if missing or extra or relabeled:
+            findings.append({'ref': ref, 'missing': missing, 'extra': extra, 'relabeled': relabeled})
+    return checked, findings
+
+
+def substack_tag_drift(pieces, fetch_tags=None):
+    """Every LIVE piece on a Substack outlet: its post's tags against the desk's.
+
+    Through the same `plan` and reader `substack_tags --verify` uses, so the audit and the tool
+    cannot disagree about what a post should carry — including a tag the vocabulary keeps off
+    Substack (`substack: false`), which is not missing there. `fetch_tags(host, reader_url,
+    url_key) -> [names]` is injectable.
+
+    `pieces` is [(ref, dir, reader_url)] — posts the forward check has JUST FOUND LIVE, at the
+    address it found them. Being published is not being on Substack: a piece goes canonical
+    first, and its Substack copy can be scheduled or missing, each already its own finding.
+    Reading `published_at` as "live here" reported two posts as uncomparable that were simply
+    not this check's to read (2026-09-16, the first run).
+    -> (checked, findings, unreachable)."""
+    import publications as pb
+    import substack_tags as st
+    fetch_tags = fetch_tags or st.public_tags
+    jobs, findings = [], []
+    for ref, d, reader_url in pieces:
+        try:
+            p = st.plan(d, clear=True)            # clear: an untagged post is compared, not refused
+        except pb.Refused as ex:
+            findings.append({'ref': ref, 'problem': str(ex)})
+            continue
+        jobs.append((ref, {**p, 'reader_url': reader_url or p['reader_url']}))
+
+    def one(job):
+        ref, p = job
+        try:
+            return ref, p, fetch_tags(p['host'], p['reader_url'], p['url_key']), None
+        except pb.Refused as ex:
+            return ref, p, None, str(ex)
+        except Exception as ex:                    # noqa: BLE001 — not checked is not fine
+            return ref, p, None, ex
+
+    unreachable = []
+    with cf.ThreadPoolExecutor(max_workers=8) as ex:
+        for ref, p, now, err in ex.map(one, jobs):
+            if isinstance(err, str):
+                findings.append({'ref': ref, 'problem': err})
+            elif err is not None:
+                unreachable.append(ref)
+            else:
+                missing, extra = tag_drift(p['labels'], now)
+                if missing or extra:
+                    findings.append({'ref': ref, 'missing': missing, 'extra': extra})
+    return len(jobs), findings, unreachable
+
+
+def _tag_line(where, f):
+    if f.get('problem'):
+        return f"  TAGS  {f['ref']} on {where}: could not be compared — {f['problem']}"
+    bits = []
+    if f.get('missing'):
+        bits.append('missing ' + ', '.join(f['missing']))
+    if f.get('extra'):
+        bits.append('extra ' + ', '.join(f['extra']))
+    for t, old, new in f.get('relabeled') or []:
+        bits.append(f'{t} reads {old!r}, the vocabulary says {new!r}')
+    return f"  TAGS  {f['ref']} on {where}: " + '; '.join(bits)
+
+
 def main():
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument('--config', default='publishing/outlets.yaml')
@@ -438,6 +579,11 @@ def main():
                          'that the URL resolves (a 200 proves a page exists, not that it is '
                          'the right one)')
     ap.add_argument('--quiet', action='store_true', help='only print problems')
+    ap.add_argument('--no-tags', action='store_true',
+                    help='skip comparing each text\'s tags on the store and on Substack to the desk')
+    ap.add_argument('--store', default=None,
+                    help='the content store config (default: store.yaml beside --config); '
+                         'a desk with none has no store tags to compare')
     a = ap.parse_args()
 
     if not os.path.exists(a.config):
@@ -495,6 +641,14 @@ def main():
         for (pc, oname, url), (status, body, final) in zip(
                 jobs, ex.map(lambda j: fetch(j[2]), jobs)):
             ok = status == 200 and not landed_on_not_found(final, outlets[oname])
+            if ok and pending_until(os.path.join(a.pieces, pc['name']), outlets[oname]):
+                # A WAITING outlet whose moment is still ahead cannot be carrying the piece yet,
+                # so a 200 there is not the post. Substack answers a scheduled post's own
+                # address with a teaser — full og: tags, no body — and this check counted it as
+                # present; the tag gate then asked for tags on a post the API says does not
+                # exist (2026-09-16, a post scheduled for 09-18). Judged by its schedule instead,
+                # through the branch below, which reports it scheduled or NOT SCHEDULED.
+                ok = False
             # Not there YET is not the same as missing. A piece goes canonical-first — the
             # canonical has no scheduler, the syndicated outlets have their own — so between
             # the two moments the syndicated copy is absent BY DESIGN. Excused only for an
@@ -586,6 +740,40 @@ def main():
                     continue
                 live.add(rest)
             reverse[oname] = {'live': live, 'unknown': sorted(live - known_on(pieces, oc))}
+
+    # ---- tags: the desk's, against what each outlet actually carries ---------
+    tag_store, tag_sub = None, None            # (checked, findings, unreachable) or None
+    if not a.no_tags:
+        import publications as pb
+        import tags as tagvocab
+        import substack_account as sa
+        root = pb.instance_root(os.path.dirname(os.path.abspath(a.pieces)))
+        pubs, reg_problems = pb.load(root)
+        if reg_problems:
+            die(1, 'the publication registry is malformed: ' + '; '.join(reg_problems))
+        vocabs = tagvocab.Vocabularies(root, None, pubs)
+        store_cfg = a.store or os.path.join(os.path.dirname(a.config) or '.', 'store.yaml')
+        if os.path.exists(store_cfg):
+            with open(store_cfg) as f:
+                base = ((yaml.safe_load(f) or {}).get('store') or {}).get('base_url')
+            if base:
+                status, body, _f = fetch(base.rstrip('/') + '/index.json', timeout=25)
+                if status == 200 and body:
+                    try:
+                        n, found = store_tag_drift(json.loads(body), root, pubs, vocabs,
+                                                   outlets=list(outlets) if a.outlet else None)
+                        tag_store = (n, found, False)
+                    except ValueError:
+                        tag_store = (0, [], f'index.json did not parse')
+                else:
+                    tag_store = (0, [], f'index.json answered HTTP {status}')
+        subs = {n for n, oc in outlets.items() if sa.is_substack(oc)}
+        # Only posts the forward check just found LIVE, at the address it found them.
+        on_sub = [(r['piece'], os.path.join(a.pieces, r['piece']), r['final'] or r['url'])
+                  for r in results if r['outlet'] in subs and r['ok']]
+        if on_sub:
+            n, found, unr = substack_tag_drift(on_sub)
+            tag_sub = (n, found, unr)
 
     # ---- report --------------------------------------------------------------
     stale = [r for r in results
@@ -680,6 +868,26 @@ def main():
         for r in no_preview:
             print(f"  PREVIEW  {r['piece']} on {r['outlet']}: {r['preview']}")
 
+    tag_drifted = []
+    if tag_store is not None:
+        n, found, err = tag_store
+        if err:
+            print(f"  tags: the store could not be read — {err}; not checked is not fine")
+        else:
+            print(f"  tags: {n - len(found)}/{n} text(s) carry the desk's tags on the store index")
+        for f in found:
+            print(_tag_line('the store', f))
+        tag_drifted += found
+    if tag_sub is not None:
+        n, found, unr = tag_sub
+        print(f"  tags: {n - len([f for f in found if not f.get('problem')]) - len(unr)}/{n} "
+              f"Substack post(s) carry the desk's tags")
+        for f in found:
+            print(_tag_line('Substack', f))
+        for ref in unr:
+            print(f"  TAGS  {ref} on Substack: its post could not be read")
+        tag_drifted += found
+
     if a.content:
         checked = [r for r in results if r.get('content') is not None]
         print(f"  content: {len(checked) - len(stale)}/{len(checked)} page(s) carry every "
@@ -707,6 +915,12 @@ def main():
         print("\nFAILED: a page is live but its link preview is broken — a shared link shows "
               "no image. A store publish never touches the site repo, where previews are made.")
         sys.exit(3)
+    if tag_drifted:
+        print("\nFAILED: an outlet carries tags the desk does not. A tag added to a live text "
+              "reaches no outlet by itself —\n  the store record and the Substack post are separate "
+              "writes. Re-publish the record (md_to_site → bundle_pieces → store_publish, or "
+              "talk_bundle for a talk)\n  and the post (substack_tags --live).")
+        sys.exit(3)
     if undeclared or lying:
         print("\nFAILED: an outlet carries something the manifests do not declare.")
         sys.exit(3)
@@ -726,6 +940,9 @@ def main():
         sys.exit(2)
     if unreach:
         print("\nFAILED: some outlets could not be reached; 'not checked' is not 'fine'.")
+        sys.exit(2)
+    if (tag_store and tag_store[2]) or (tag_sub and tag_sub[2]):
+        print("\nFAILED: tags could not be compared everywhere; 'not checked' is not 'fine'.")
         sys.exit(2)
     print("\nevery published piece is on every outlet it declares.")
     sys.exit(0)

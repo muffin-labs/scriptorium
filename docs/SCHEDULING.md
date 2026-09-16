@@ -151,6 +151,12 @@ does. `outlet_audit` then reads three states rather than two:
 | **NOT SCHEDULED** | due later, and nothing records one. **A finding, on the day it can still be fixed.** |
 | **MISS** | the moment has passed and the copy is not there |
 
+**A 200 before the moment is a teaser, not the post** (2026-09-16). A waiting outlet whose moment
+is still ahead cannot be carrying the piece, so `outlet_audit` judges its copy by the schedule
+even when the address answers — Substack serves a scheduled post's own URL with a teaser (see
+below), and the forward check used to count that as present. The tag gate then asked for tags on
+a post whose API answered 404. It reads *scheduled* now, which is what it is.
+
 ## Two things measured on the first scheduled publication (2026-09-11)
 
 **A scheduled Substack post has its slug from the moment it is scheduled.** `GET
