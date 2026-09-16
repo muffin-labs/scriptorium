@@ -5163,7 +5163,7 @@ def unit_publication_ownership(tmp):
     import publications as pb
     import check_pronouns as cp
     root = os.path.join(tmp, 'owndesk')
-    for d in ('publishing', 'styles/voice-a', 'styles/voice-b', 'books/proj-a', 'books/novel-a',
+    for d in ('publishing', 'styles/voice-a', 'styles/voice-b', 'projects/proj-a', 'projects/novel-a',
               'pieces/pa', 'pieces/pb'):
         os.makedirs(os.path.join(root, d), exist_ok=True)
     reg = os.path.join(root, 'publishing', 'publications.yaml')
@@ -5174,7 +5174,7 @@ def unit_publication_ownership(tmp):
     open(os.path.join(root, 'styles/voice-a/config.yaml'), 'w').write('publication: a\nformality: 2\n')
     open(os.path.join(root, 'styles/voice-b/config.yaml'), 'w').write('formality: 3\n')
     open(os.path.join(root, 'pieces/pa/publish.yaml'), 'w').write('title: PA\npublication: a\n')
-    open(os.path.join(root, 'pieces/pa/README.md'), 'w').write('# PA\n[v](../../styles/voice-a/) [p](../../books/proj-a/)\n')
+    open(os.path.join(root, 'pieces/pa/README.md'), 'w').write('# PA\n[v](../../styles/voice-a/) [p](../../projects/proj-a/)\n')
     open(os.path.join(root, 'pieces/pb/publish.yaml'), 'w').write('title: PB\npublication: b\n')
     open(os.path.join(root, 'pieces/pb/README.md'), 'w').write('# PB\n[v](../../styles/voice-a/)\n')
     pubs, probs = pb.load(root)
@@ -5190,15 +5190,15 @@ def unit_publication_ownership(tmp):
     open(os.path.join(root, 'styles/voice-b/config.yaml'), 'w').write('publication: a\n')
     open(os.path.join(root, 'pieces/pb/README.md'), 'w').write('# PB\n[v](../../styles/voice-b/)\n')
     os.makedirs(os.path.join(root, 'styles/stray'), exist_ok=True)
-    os.makedirs(os.path.join(root, 'books/orphan'), exist_ok=True)
+    os.makedirs(os.path.join(root, 'projects/orphan'), exist_ok=True)
     problems, _n, _c = pb.check(root, pubs)
     check('own: a config that disagrees with the registry fails',
           any("names publication 'a', but b owns it" in x for x in problems), str(problems))
     check('own: an unowned style and an unowned project both fail',
           any(x.startswith('styles/stray:') for x in problems)
-          and any(x.startswith('books/orphan:') for x in problems), str(problems))
+          and any(x.startswith('projects/orphan:') for x in problems), str(problems))
     open(os.path.join(root, 'styles/voice-b/config.yaml'), 'w').write('publication: b\n')
-    os.rmdir(os.path.join(root, 'styles/stray')); os.rmdir(os.path.join(root, 'books/orphan'))
+    os.rmdir(os.path.join(root, 'styles/stray')); os.rmdir(os.path.join(root, 'projects/orphan'))
     problems, _n, _c = pb.check(root, pubs)
     check('own: the desk is clean once every voice and project is owned both ways', not problems, str(problems))
     open(reg, 'w').write(base.replace('    styles: [voice-b]\n', '    styles: [voice-b, voice-a]\n'))
@@ -5208,13 +5208,19 @@ def unit_publication_ownership(tmp):
     check('own: `books:` still reads as the older name of `projects:`',
           pb.load(root)[0]['a']['projects'] == ['proj-a', 'novel-a'])
     open(reg, 'w').write(base)
+    legacy = os.path.join(tmp, 'owndesk-legacy')
+    for d in ('styles', 'books/proj-a', 'pieces'):
+        os.makedirs(os.path.join(legacy, d), exist_ok=True)
+    check('own: a desk from before the rename keeps its projects in books/',
+          pb.projects_dir(legacy) == os.path.join(legacy, 'books')
+          and pb.projects_dir(root) == os.path.join(root, 'projects'))
     import io, contextlib
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         rc = pb.main(['--root', root, 'context', 'pa'])
     check('own: context names the publication, a missing house file as none, the project and the style',
           rc == 0 and 'publication: a' in out.getvalue() and '(none' in out.getvalue()
-          and 'books/proj-a' in out.getvalue() and 'styles/voice-a' in out.getvalue(), out.getvalue())
+          and 'projects/proj-a' in out.getvalue() and 'styles/voice-a' in out.getvalue(), out.getvalue())
     os.makedirs(os.path.join(root, 'publishing', 'house'), exist_ok=True)
     open(os.path.join(root, 'publishing', 'house', 'a.md'), 'w').write('# House A\n')
     out = io.StringIO()

@@ -251,7 +251,7 @@ would notice adds a line under *Unreleased* in the same commit.
   tags, slugs in the content store) and what is shared. `tools/publications.py`
   checks it. A one-publication desk needs none of it.
 
-Book-scale skills (for a long-form `books/<name>/` manuscript — novel, memoir):
+Book-scale skills (for a long-form `projects/<name>/` manuscript — novel, memoir):
 
 - `skills/book-status` — the `whats-on-the-desk` of book scale: reads the book
   README (truth) and structure, proposes one next move.

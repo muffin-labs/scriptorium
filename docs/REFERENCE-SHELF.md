@@ -72,7 +72,7 @@ directory asserts something false about a file that the manifest would have reco
 correctly.
 
 And the association the directory stands in for **already has a home**:
-`books/<book>/sources.md`, the annotated *why it matters*. The references folder was only
+`projects/<book>/sources.md`, the annotated *why it matters*. The references folder was only
 ever the manifest of files on disk. A file can serve two books; a directory can hold it
 once.
 

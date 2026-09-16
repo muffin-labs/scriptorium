@@ -24,7 +24,7 @@ next to the sentence it changes.
 2. **Read the piece's `README.md`** — target style, book, audience, budget, and the
    **guardrails**, which are the piece's own rules and are findings when broken. Then the layers
    above the style, whose rules are findings too: `python3 framework/tools/publications.py context <slug>` names the text's publication, its
-   **house file** (`publishing/house/<publication>.md`), its **project** (`books/<name>/`) and its
+   **house file** (`publishing/house/<publication>.md`), its **project** (`projects/<name>/`) and its
    style. Load the house file and the project's README/brief with the style: the house file holds
    the conventions every voice of that publication keeps, and the desk's `CLAUDE.md` does not carry
    them. No house file means the publication keeps none beyond the desk's — never borrow another

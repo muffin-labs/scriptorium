@@ -87,10 +87,11 @@ SOURCE_EXT = (".pdf", ".txt", ".md", ".html", ".htm", ".epub")
 # ---------------------------------------------------------------- discovery
 
 def root():
-    """The instance root: the directory holding books/. Run from anywhere inside it."""
+    """The instance root: the directory holding projects/ (books/ on an older desk). Run from
+    anywhere inside it."""
     d = os.getcwd()
     while True:
-        if os.path.isdir(os.path.join(d, "books")):
+        if os.path.isdir(os.path.join(d, "projects")) or os.path.isdir(os.path.join(d, "books")):
             return d
         up = os.path.dirname(d)
         if up == d:
@@ -99,7 +100,8 @@ def root():
 
 
 def books(r=None):
-    """The books the desk has, for validating and filtering the manifest's Book column.
+    """The projects the desk has (projects/<name>/, books/ on an older desk), for validating and
+    filtering the manifest's Book column — the column keeps its name; its values are projects.
 
     ONE SHELF, SINCE 2026-09-13. Sources used to live at books/<book>/references/, and
     the division did no work: three books existed and one had a shelf, `catalog()`
@@ -111,7 +113,9 @@ def books(r=None):
     (framework/docs/REFERENCE-SHELF.md.)
     """
     r = r or root()
-    base = os.path.join(r, "books")
+    base = os.path.join(r, "projects")
+    if not os.path.isdir(base):
+        base = os.path.join(r, "books")
     if not os.path.isdir(base):
         return []
     return sorted(b for b in os.listdir(base) if os.path.isdir(os.path.join(base, b)))
@@ -1055,7 +1059,7 @@ def cmd_check(argv):
                   f"`--book` can never select this row")
             bad += 1
         elif b not in known:
-            print(f"  UNKNOWN BOOK {b!r}: {f}  (line {row['line']}) — no books/{b}/. "
+            print(f"  UNKNOWN BOOK {b!r}: {f}  (line {row['line']}) — no projects/{b}/. "
                   f"Have: {', '.join(sorted(known)) or '(none)'}")
             bad += 1
         if not row["restricted"] and is_ignored(rel, r) and not tracked(rel, r):

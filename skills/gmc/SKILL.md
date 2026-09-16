@@ -30,13 +30,13 @@ collide here, and who is thwarted.*
 
 ## Always do this first
 
-1. Read `books/<name>/README.md` (truth) and `outline/characters.md` (who they are).
-2. Read any existing GMC sheets in `books/<name>/gmc/` and the feedback the README
+1. Read `projects/<name>/README.md` (truth) and `outline/characters.md` (who they are).
+2. Read any existing GMC sheets in `projects/<name>/gmc/` and the feedback the README
    points to. Don't restate what's there; extend it.
 
 ## Doing the work
 
-**Character sheets** — one file per main character, `books/<name>/gmc/<character>.md`:
+**Character sheets** — one file per main character, `projects/<name>/gmc/<character>.md`:
 
 ```
 # <Character> — GMC

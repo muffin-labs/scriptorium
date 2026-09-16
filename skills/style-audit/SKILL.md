@@ -30,16 +30,16 @@ proposed change marked where it lands. This audit is one input to it.
      are the freshest signal; weight them.
    - `styles/<style>/exemplars/` — the texture to compare against.
    - **The publication's house file** — every rule in it is a check. `python3 framework/tools/publications.py context <slug>` names the text's publication, its
-   **house file** (`publishing/house/<publication>.md`), its **project** (`books/<name>/`) and its
+   **house file** (`publishing/house/<publication>.md`), its **project** (`projects/<name>/`) and its
    style. Load the house file and the project's README/brief with the style: the house file holds
    the conventions every voice of that publication keeps, and the desk's `CLAUDE.md` does not carry
    them. No house file means the publication keeps none beyond the desk's — never borrow another
    publication's. (2026-09-15.)
-   - `books/<book>/brief.md` (or the piece's own audience declaration) — **the
+   - `projects/<book>/brief.md` (or the piece's own audience declaration) — **the
      audience and approach are rules too.** Who it's for, the God-entry stance, the
      register, the apparatus. A draft that strays from its reader fails the audit as
      surely as one that strays from its voice.
-   - `books/<book>/facts.md` — the witness/anchor ledger. **Ground truth:** every
+   - `projects/<book>/facts.md` — the witness/anchor ledger. **Ground truth:** every
      lived detail in the prose must trace to a fact here; `anchor?` items are
      unverified.
 3. Read the draft (or the passage named).

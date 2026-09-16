@@ -10,7 +10,7 @@ concept so that everything which must be kept *apart* per publication has someth
 desk
 ├── publications          publishing/publications.yaml — the registry
 │   ├── outlets           where it is read (outlets.yaml defines them; each has ONE owner)
-│   ├── projects          the long projects it holds — books/<name>/ (each has ONE owner)
+│   ├── projects          the long projects it holds — projects/<name>/ (each has ONE owner)
 │   ├── styles            the voices it speaks in — styles/<name>/ (each has ONE owner)
 │   ├── house rules       publishing/house/<publication>.md — conventions every voice keeps
 │   └── tags              its own vocabulary — publishing/tags/<publication>.yaml
@@ -50,7 +50,7 @@ Most general first — and a rule lives at the narrowest layer that holds it for
 |---|---|---|
 | desk | `CLAUDE.md` | concurrency, commits, CI, the reference shelf, publishing mechanics — what every text keeps |
 | publication | `publishing/house/<publication>.md` | house conventions every voice of that publication keeps (a casing rule, a link convention, what may be quoted and how) |
-| project | `books/<name>/` — README, brief, its own `CLAUDE.md` | one project's world: a novel's POV rules, a book's arc and ledgers |
+| project | `projects/<name>/` — README, brief, its own `CLAUDE.md` | one project's world: a novel's POV rules, a book's arc and ledgers |
 | style | `styles/<name>/` | one voice |
 
 **A publication's conventions do not belong in the desk's `CLAUDE.md`.** Every text on the desk
@@ -60,8 +60,9 @@ days. `publications.py context <slug>` prints the publication, house file, proje
 text; `draft`, `critique`, `review`, `rewrite`, `style-audit` and `publish` load what it names. A
 publication with no house file keeps nothing beyond the desk's, and no skill borrows another's.
 
-A **project** is a directory under `books/` — a book, a fellowship's founding documents, a novel.
-A piece names its project by linking into it from its README; a project need not publish pieces at
+A **project** is a directory under `projects/` — a book, a fellowship's founding documents, a novel.
+The directory was `books/` until 2026-09-16, and a desk that still has only `books/` is read
+the same way. A piece names its project by linking into it from its README; a project need not publish pieces at
 all (a novel drafts chapters in its own directory). `books:` is read as the older name of
 `projects:`.
 
@@ -89,7 +90,7 @@ two pieces — the way a talk and its essay are two — each in its own publicat
 - **Every outlet a piece declares belongs to its publication.** The exporter refuses (exit 9) a
   piece that declares another publication's outlet.
 - **Every style and every project belongs to exactly one publication**, and nothing under
-  `styles/` or `books/` is unowned. A style's `config.yaml` names its `publication:`, and a
+  `styles/` or `projects/` is unowned. A style's `config.yaml` names its `publication:`, and a
   disagreement with the registry fails. **A text whose README names a style or a project its
   publication does not own fails** — one publication's voice cannot draft the other's piece.
   (Until 2026-09-15 this was a note; ownership ran one way, and a voice registered to neither
@@ -136,7 +137,7 @@ registry the day a second publication arrives, then `assign` every piece to one 
 
 ## Adding a project
 
-Make `books/<name>/` (a README saying what it is, and a `CLAUDE.md` if it has rules of its own),
+Make `projects/<name>/` (a README saying what it is, and a `CLAUDE.md` if it has rules of its own),
 add `<name>` to its publication's `projects:`, and run `publications.py check`. A project moves
 between publications only by moving it in the registry — and every piece linking into it moves
 with it, which the check will list.
@@ -147,7 +148,7 @@ with it, which the check will list.
 2. Add it to `publishing/publications.yaml` with the outlets it owns — moving an outlet from
    one publication to another is a decision about a live site, not a tidy-up.
 3. Give it styles (`styles/<prefix>-…`, per `STYLES.md`, each `config.yaml` naming
-   `publication: <id>`), its projects under `books/`, a house file when it has a convention every
+   `publication: <id>`), its projects under `projects/`, a house file when it has a convention every
    voice keeps, and, when its pieces start carrying tags, a vocabulary:
    `tags.py define <tag> --label … --about … --publication <id>`.
 4. `publications.py check` — every piece named, every outlet owned.

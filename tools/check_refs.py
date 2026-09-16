@@ -206,7 +206,7 @@ def scan_files(root):
         for fn in filenames:
             if fn in SKIP_FILES:
                 continue
-            if fn in SCAN_NAMES or (fn.endswith('.md') and ('/DASHBOARD.d/' in p or '/books/' in p)):
+            if fn in SCAN_NAMES or (fn.endswith('.md') and ('/DASHBOARD.d/' in p or '/projects/' in p or '/books/' in p)):
                 yield os.path.join(dirpath, fn)
 
 
@@ -231,7 +231,7 @@ def collect(root):
                 text, slug = m.group(1).strip(), m.group(3)
                 if slug not in known:
                     # `../<name>/` is only a PIECE reference from inside pieces/. From
-                    # books/all-my-stories it means the sibling book, and calling that a
+                    # projects/all-my-stories it means the sibling project, and calling that a
                     # missing piece is the checker inventing a problem.
                     if (rel.startswith(('pieces' + os.sep, 'talks' + os.sep))
                             and slug not in ('..', '.') and not slug.endswith('.md')):

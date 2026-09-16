@@ -15,7 +15,7 @@ So a publication is a thing the desk names, in one registry, and each piece name
         name: Being Good              # what a reader subscribes to
         byline: E.L. Muffin
         outlets: [substack, alignmentfellowship]   # every outlet belongs to ONE publication
-        projects: [being-good, all-my-stories]     # books/<name>/ — the long projects it holds
+        projects: [being-good, all-my-stories]     # projects/<name>/ — the long projects it holds
         styles: [being-good-essay, being-good-journal]   # the voices it speaks in
         deity_conventions: true       # check_pronouns' deity sections apply to its texts
         # tags:  publishing/tags/being-good.yaml   # its tag vocabulary; this is the default
@@ -37,14 +37,14 @@ WHAT `check` HOLDS, once the registry exists:
   * every manifest names a publication the registry defines.
   * every outlet a piece declares belongs to that publication.
   * OWNERSHIP BOTH WAYS (2026-09-15). Every style directory and every project directory
-    (books/<name>/) belongs to exactly one publication, and a style's config.yaml names that
+    (projects/<name>/) belongs to exactly one publication, and a style's config.yaml names that
     same publication back. A text whose README names a style or a project is failed when its
     publication does not own it — one publication's voice cannot draft the other's piece.
   * (a note, not a failure) an outlet in outlets.yaml that no publication owns.
 
 LAYERS. A text is governed, most general first, by the desk (CLAUDE.md), its publication's
 HOUSE file (house conventions: casing, links, what a quotation may say), its project
-(books/<name>/ — README, brief, a CLAUDE.md of its own), and its style. `context` prints
+(projects/<name>/ — README, brief, a CLAUDE.md of its own), and its style. `context` prints
 the three paths below the desk for one text, so a skill loads them instead of guessing.
 
 USAGE
@@ -394,14 +394,22 @@ def of_piece(man, pubs):
     return pid, []
 
 
+def projects_dir(root):
+    """The directory a desk keeps its projects in: `projects/`, or `books/` on a desk from before
+    2026-09-16, when the directory was renamed to match what the registry calls them."""
+    new, old = os.path.join(root, 'projects'), os.path.join(root, 'books')
+    return old if os.path.isdir(old) and not os.path.isdir(new) else new
+
+
 def readme_refs(pdir):
-    """(style, book) named by the piece README's first styles/… and books/… links, if any."""
+    """(style, project) named by the piece README's first styles/… and projects/… links, if any
+    (books/… on an older desk)."""
     try:
         text = open(os.path.join(pdir, 'README.md'), encoding='utf-8').read()
     except OSError:
         return None, None
     s = re.search(r'styles/([a-z0-9][a-z0-9-]*)/', text)
-    b = re.search(r'books/([a-z0-9][a-z0-9-]*)/', text)
+    b = re.search(r'(?<![A-Za-z0-9])(?:projects|books)/([a-z0-9][a-z0-9-]*)/', text)
     return (s.group(1) if s else None), (b.group(1) if b else None)
 
 
@@ -410,8 +418,9 @@ def check(root, pubs, outlets_file=None):
     import corpus
     problems, notes, counts = [], [], {p: 0 for p in pubs}
     # Ownership both ways: what is on disk is owned, what is owned is on disk, and a style
-    # names its owner back. Only a desk that HAS styles/ or books/ is asked.
-    for field, top, what in (('styles', 'styles', 'style'), ('projects', 'books', 'project')):
+    # names its owner back. Only a desk that HAS styles/ or projects/ is asked.
+    ptop = os.path.basename(projects_dir(root))
+    for field, top, what in (('styles', 'styles', 'style'), ('projects', ptop, 'project')):
         if not os.path.isdir(os.path.join(root, top)):
             continue
         present = _dirs(root, top)
@@ -448,7 +457,7 @@ def check(root, pubs, outlets_file=None):
                             + (f' — it is {owner_of(pubs, "styles", style)}\'s'
                                if owner_of(pubs, 'styles', style) else ''))
         if book and book not in pubs[pid]['projects']:
-            problems.append(f"{slug}: README's project books/{book} is not one {pid} owns"
+            problems.append(f"{slug}: README's project {os.path.basename(projects_dir(root))}/{book} is not one {pid} owns"
                             + (f' — it is {owner_of(pubs, "projects", book)}\'s'
                                if owner_of(pubs, 'projects', book) else ''))
     if outlets_file and os.path.exists(outlets_file):
@@ -581,7 +590,7 @@ def _dispatch(a, root, pubs, reg_problems):
         print(f"publication: {pid or '(none)'}" + (f"   ({e['name']})" if e else ''))
         print(f"house:       " + (rel(house) if house and os.path.exists(house) else
                                   '(none — this publication keeps no house rules beyond the desk)'))
-        print(f"project:     " + (rel(os.path.join(root, 'books', book)) if book else '(none)'))
+        print(f"project:     " + (rel(os.path.join(projects_dir(root), book)) if book else '(none)'))
         print(f"style:       " + (rel(os.path.join(root, 'styles', style)) if style else '(none named in README)'))
         print(f"deity conventions: {'yes' if (e.get('deity_conventions') if e else True) else 'no'}")
         for p in probs:

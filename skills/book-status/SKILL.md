@@ -8,15 +8,15 @@ description: Orientation for a long-form book on the desk (novel, memoir). Use w
 The view across one book's acts and chapters. Proposes the next move; it doesn't
 draft (that's `chapter-draft`) or audit (that's `chapter-audit` / `pov-audit`).
 
-A book is a `books/<name>/` folder. Unlike a piece, it holds many chapters, a
+A book is a project — a `projects/<name>/` folder (`books/<name>/` on a desk from before 2026-09-16). Unlike a piece, it holds many chapters, a
 scaffold layer (outline / characters / GMC / continuity), and its own craft guide.
 The README is truth; every other file can lag.
 
 ## Always do this first
 
-1. Read `books/<name>/README.md` — status, locked decisions, the current direction.
+1. Read `projects/<name>/README.md` — status, locked decisions, the current direction.
    Where the README and an older outline disagree, **the README governs.**
-2. Read `books/<name>/outline/structure.md` (or equivalent) — the chapter list and
+2. Read `projects/<name>/outline/structure.md` (or equivalent) — the chapter list and
    per-chapter status (drafted / outlined / TBD).
 3. Open only what you need for the move at hand: a chapter's `chapter_notes/<n>.md`,
    its `book/<n>.md` prose, the `gmc/` sheets, the `log/`. Note the date.
@@ -39,7 +39,7 @@ pre-feedback, pre-rewrite, or pre-continuity-fix. Cross-check the README's statu
 
 Keep the book honest:
 
-1. Append a dated entry to `books/<name>/log/<current-month>.md` (create `log/` if the
+1. Append a dated entry to `projects/<name>/log/<current-month>.md` (create `log/` if the
    book doesn't have one) — append-only, newest at the bottom.
-2. Update `books/<name>/README.md` status and any per-chapter status in `structure.md`.
+2. Update `projects/<name>/README.md` status and any per-chapter status in `structure.md`.
 3. If the desk's top-level `DASHBOARD.md` tracks the book, refresh its block.

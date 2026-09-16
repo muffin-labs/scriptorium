@@ -12,22 +12,22 @@ continuity, POV scheme, and motif system, not just a style.
 ## Always do this first
 
 1. Identify the **book**, the **chapter**, and its **POV character** from
-   `books/<name>/README.md` and `outline/structure.md`. If POV or chapter is
+   `projects/<name>/README.md` and `outline/structure.md`. If POV or chapter is
    ambiguous, ask — don't guess.
 2. Load the scaffold, in this order:
-   - `books/<name>/README.md` — **truth** (locked decisions; where it disagrees with
+   - `projects/<name>/README.md` — **truth** (locked decisions; where it disagrees with
      an older outline, it governs).
    - `chapter_notes/<n>.md` — the beat-by-beat plan for *this* chapter.
    - `outline/characters.md` — physical + **dialogue-voice** reference (single source
      of truth for how people look and sound). Match the POV's internal voice.
-   - `books/<name>/gmc/<pov>.md` — what this character wants and what collides here.
+   - `projects/<name>/gmc/<pov>.md` — what this character wants and what collides here.
    - `CLAUDE.md` (the book's craft guide) — POV rules, motif pairs, any conventions.
 3. If the book names a target **style** (a tuned voice in `styles/`), load it as
    steering exactly as `draft` does (style.md + config.yaml + exemplars).
 
 ## Drafting
 
-- Write into `books/<name>/book/<chapter>.md`. One current draft per chapter; prior
+- Write into `projects/<name>/book/<chapter>.md`. One current draft per chapter; prior
   versions live in git, not stacked in the file.
 - **Honor the chapter's job, not whatever comes to mind.** Draft the notes' spine and
   the POV's GMC — the scene should be someone *wanting and colliding*, not events
@@ -43,7 +43,7 @@ continuity, POV scheme, and motif system, not just a style.
 
 ## After a drafting session
 
-1. Append a dated entry to `books/<name>/log/<current-month>.md` — what you drafted,
+1. Append a dated entry to `projects/<name>/log/<current-month>.md` — what you drafted,
    decisions, open threads. Append-only.
 2. Update the chapter's status in `outline/structure.md` and the README if the act's
    status moved.

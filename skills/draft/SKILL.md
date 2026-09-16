@@ -13,7 +13,7 @@ the loop — write freely, revise later, let git remember old versions.
 1. Identify the **piece** and its **target style** from `pieces/<name>/README.md`
    (the `Style:` line). If the piece or style is ambiguous, ask — don't guess a
    voice. Then the layers above the style: `python3 framework/tools/publications.py context <slug>` names the text's publication, its
-   **house file** (`publishing/house/<publication>.md`), its **project** (`books/<name>/`) and its
+   **house file** (`publishing/house/<publication>.md`), its **project** (`projects/<name>/`) and its
    style. Load the house file and the project's README/brief with the style: the house file holds
    the conventions every voice of that publication keeps, and the desk's `CLAUDE.md` does not carry
    them. No house file means the publication keeps none beyond the desk's — never borrow another

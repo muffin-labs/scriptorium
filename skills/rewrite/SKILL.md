@@ -18,9 +18,9 @@ under a constitution that has changed. Most of the work is deciding what stays f
 1. **Read the piece's scaffold, not just its prose.** `README.md` (stage, voice, decisions,
    guardrails, consent), `publish.yaml` (is it live? which footnotes are verified?), the `log/`
    (what has been corrected on the page since it published — those corrections are load-bearing
-   and must survive), and the ledger entries it rests on (`books/<name>/facts.md` for a
+   and must survive), and the ledger entries it rests on (`projects/<name>/facts.md` for a
    witness-anchored piece). And the layers above the voice: `python3 framework/tools/publications.py context <slug>` names the text's publication, its
-   **house file** (`publishing/house/<publication>.md`), its **project** (`books/<name>/`) and its
+   **house file** (`publishing/house/<publication>.md`), its **project** (`projects/<name>/`) and its
    style. Load the house file and the project's README/brief with the style: the house file holds
    the conventions every voice of that publication keeps, and the desk's `CLAUDE.md` does not carry
    them. No house file means the publication keeps none beyond the desk's — never borrow another
@@ -164,7 +164,7 @@ late — say so and hold.
    `dashboard.py sync`. **Check for a stale duplicate afterwards** — two fragments for one slug
    render the block twice and neither is wrong on its face.
 3. **Sweep every cross-reference**, which is the part that gets missed: sibling READMEs, `outline.md`
-   and `notes.md` seam notes, the book's `pieces.md` pointer, and any `books/<name>/*.md` that names
+   and `notes.md` seam notes, the book's `pieces.md` pointer, and any `projects/<name>/*.md` that names
    the piece. `grep -rn '<old>' --include='*.md' .` and read every hit.
 4. **Leave `log/` and `corrections.md` alone.** They are append-only records of what was true when
    written; an old slug there is history, not rot — the same exemption `check_refs.py` already makes.

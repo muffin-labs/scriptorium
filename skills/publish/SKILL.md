@@ -1467,7 +1467,7 @@ a reader. It is checked by the suite (`corpus_headers`) precisely because invisi
 rot unnoticed.
 
 **Then correct every sentence that still calls it a draft.** A book index
-(`books/<name>/writings.md`), a sibling README's seams list, a dashboard fragment — anything
+(`projects/<name>/writings.md`), a sibling README's seams list, a dashboard fragment — anything
 written by hand while the piece was unpublished now says something false, and publishing
 changes none of it for you. Five pieces in three days went on being described as unpublished
 after they were live (*In Vain*, *The Mask Comes Off Last*, *Rising After Falls*, *What Was

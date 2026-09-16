@@ -15,7 +15,7 @@ and say — concretely — where it lands and where it strays.
 2. Load `styles/<style>/style.md`, `config.yaml`, and a sampling of `exemplars/`
    — the same steering `draft` uses. You're checking the draft against *this*
    voice, not against generic "good writing". And the layers above it: `python3 framework/tools/publications.py context <slug>` names the text's publication, its
-   **house file** (`publishing/house/<publication>.md`), its **project** (`books/<name>/`) and its
+   **house file** (`publishing/house/<publication>.md`), its **project** (`projects/<name>/`) and its
    style. Load the house file and the project's README/brief with the style: the house file holds
    the conventions every voice of that publication keeps, and the desk's `CLAUDE.md` does not carry
    them. No house file means the publication keeps none beyond the desk's — never borrow another
