@@ -21,6 +21,18 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **The reference sweep — a convention for reading a shelf larger than the context window.**
+  `docs/REFERENCE-SWEEP.md`, and a section in `CLAUDE.md`. `references.py search` answers any
+  question with a phrase in it; a question with none goes to a cheap-model subagent that returns
+  **addresses, never words** (`<file> @ <line>` plus a gloss), and the session opens those lines
+  itself. Nothing a sweep says may reach a draft, a footnote, or a characterization of a source.
+  The shelf on this desk is 41 text sources and 1,383,253 lines, the largest single volume 188,974
+  — unreadable whole — and it is OCR: a model asked what a passage *says* repairs the damage
+  silently, which a summary hides and a line number cannot. It is aimed at the fault class the
+  quote gates pass green, since this corpus's footnote faults are mostly characterizations of a
+  source rather than misquotations. It replaces no check and does not stand in for `review`'s
+  re-open of the primary sources, which is a human's. MINOR.
+
 - **`outlet_audit.py` compares tags.** Every text on the store index — pieces and talks, tag ids
   and labels, from one fetch — and every Substack post the forward check just found live, through
   `substack_tags`' own plan, against the desk. A finding is `TAGS … missing / extra / relabeled`

@@ -65,6 +65,27 @@ A style is structured context that steers a draft — never model weights.
   its outlets; every style and project has one owner, and a style's `config.yaml` names it back. **A one-publication desk needs no registry**; add it with the second publication.
   See `docs/PUBLICATIONS.md`.
 
+## Reading the shelf — search first, sweep for an address, read the page yourself
+
+Source texts live in `references/`, indexed, and a quotation is checked against a file
+rather than recalled (`docs/REFERENCE-SHELF.md`). The shelf is far larger than any context
+window — a single lexicon volume can run past 180,000 lines — so reading it is always a
+question of what you open, not whether you open it.
+
+- **`references.py search "<phrase>"` first.** Every question that has a phrase in it is
+  answered there, exactly, at one line per hit. Reach for it instead of recalling a wording.
+- **A question with no phrase in it gets a sweep**, and a sweep returns **addresses, never
+  words**: a cheap-model subagent reads the span and hands back `<file> @ <line>` with a
+  one-line gloss, then you open those lines and read them. Nothing a sweep says may reach a
+  draft, a footnote, or a characterization of a source — the shelf exists so that wording
+  comes from the page, and a summary wearing a citation is the one form no checker catches.
+  The shelf is OCR and visibly damaged; a model asked what a passage *says* will silently
+  repair it, which is invisible in a summary and obvious at the line. `docs/REFERENCE-SWEEP.md`.
+- **A sweep is not a check and never a substitute for `review`'s re-open of the primary
+  sources**, which is a human's. It narrows where the human looks. Most footnote faults on a
+  corpus like this are characterizations rather than misquotations, and those pass the quote
+  gates green — a sweep is how you find the forty lines worth arguing with.
+
 ## Working alongside other sessions
 
 Several Claude sessions run against this desk at once — **six on 2026-09-02**. Most of the desk
