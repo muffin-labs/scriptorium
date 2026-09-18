@@ -1134,6 +1134,17 @@ def cmd_seed(piece_dir, mode, arg):
         rel = os.path.relpath(os.path.abspath(os.path.join(piece_dir, 'draft.md')), top)
         blob = subprocess.run(['git', '-C', top, 'show', f'{arg}:{rel}'],
                               capture_output=True, text=True, check=True).stdout
+        # publish.yaml AS AT THAT REV too, and it must reach the RENDER, not just the header.
+        # The body is rendered from draft.md AND the manifest — the converter prepends
+        # "Originally published at <canonical>" for any piece whose manifest records one — so
+        # copying today's publish.yaml beside an old draft.md renders a body that was never
+        # pushed anywhere. Measured 2026-09-18 on scaling-computer-vision-workflows-aws:
+        # `canonical:` was recorded at the cutover, AFTER the Substack compose, and the seed
+        # produced a 35-block baseline for a 34-block post. A baseline that never matched the
+        # live post is the exact lie this file's seal guard exists to refuse.
+        relman = os.path.relpath(os.path.abspath(os.path.join(piece_dir, 'publish.yaml')), top)
+        old_man = subprocess.run(['git', '-C', top, 'show', f'{arg}:{relman}'],
+                                 capture_output=True, text=True)
         tmp = tempfile.mkdtemp()
         try:
             for f in os.listdir(piece_dir):
@@ -1141,23 +1152,13 @@ def cmd_seed(piece_dir, mode, arg):
                 if os.path.isfile(s):
                     shutil.copy2(s, tmp)
             open(os.path.join(tmp, 'draft.md'), 'w').write(blob)
+            if old_man.returncode == 0:
+                open(os.path.join(tmp, 'publish.yaml'), 'w').write(old_man.stdout)
             body, fns, _res, _iss = render_reader(tmp)
             bmarks, fmarks, _ok = render_marks(tmp)
+            man = read_manifest(os.path.join(tmp, 'publish.yaml'))
         finally:
             shutil.rmtree(tmp)
-        # publish.yaml AS AT THAT REV too: the title/subtitle pushed then are the baseline,
-        # and reading today's manifest would bake a later hand-edit into the baseline and so
-        # hide the very pull it exists to detect.
-        relman = os.path.relpath(os.path.abspath(os.path.join(piece_dir, 'publish.yaml')), top)
-        old_man = subprocess.run(['git', '-C', top, 'show', f'{arg}:{relman}'],
-                                 capture_output=True, text=True)
-        if old_man.returncode == 0:
-            mtmp = tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False)
-            mtmp.write(old_man.stdout); mtmp.close()
-            man = read_manifest(mtmp.name)
-            os.unlink(mtmp.name)
-        else:
-            man = read_manifest(os.path.join(piece_dir, 'publish.yaml'))
         title, subtitle = man.get('title', ''), man.get('subtitle', '')
         body_h, fns_h = [H(t) for t in body], [H(t) for t in fns]
         body_m, fns_m = [HM(r) for r in bmarks], [HM(r) for r in fmarks]
