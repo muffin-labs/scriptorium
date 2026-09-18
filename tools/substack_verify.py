@@ -408,6 +408,14 @@ def published_pieces(repo, only=None):
 
 def _norm_header(s):
     s = (s or '')
+    # A YAML title is often written quoted, and the quotes belong to the file rather than to
+    # the post. Compared raw they read as drift on a post that is perfectly correct — the
+    # third place on this desk that this bug appeared (piece_header's banner and the Notes
+    # composer's card check were the other two), which is why it is stripped here rather than
+    # unquoted in one manifest.
+    s = s.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in '"\'':
+        s = s[1:-1]
     for a, b in (('\u2018', "'"), ('\u2019', "'"), ('\u201c', '"'), ('\u201d', '"'),
                  ('\u2014', '--'), ('\u2013', '-'), ('\u2026', '...'), ('\u00a0', ' ')):
         s = s.replace(a, b)

@@ -135,7 +135,12 @@ def load(pieces_dir):
             state = 'drafted'
         else:
             state = 'missing'
-        out.append({'slug': slug, 'dir': d, 'title': man.get('title', slug),
+        # A YAML title is often quoted, and the quotes are the file's rather than the piece's.
+        # They reached the composer snippet's card check as literal characters, so `card` could
+        # never be true for a quoted title — and this session's own prompt says card MUST be true
+        # before the Note is posted. A correct Note would have stopped on a false negative.
+        out.append({'slug': slug, 'dir': d,
+                    'title': str(man.get('title') or slug).strip().strip('"\''),
                     'url': url, 'outlet': outlet, 'published_at': date, 'state': state,
                     'posted_at': block.get('posted_at', ''),
                     'note_url': block.get('note_url', ''), 'skip': block.get('skip', '')})

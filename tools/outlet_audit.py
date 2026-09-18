@@ -180,6 +180,35 @@ def schedule_state(piece_dir, outlet, outlet_cfg):
     return 'unscheduled', when, None
 
 
+def note_never_landed(pieces):
+    """-> [(slug, when)] for every piece whose `scheduled: note:` moment has passed with no
+    `substack_note:` recorded. A Note is not an outlet, so the forward and reverse checks are
+    both blind to it; without this, a scheduled Note that silently failed looks exactly like a
+    scheduled Note that is still waiting."""
+    import schedule
+    from datetime import datetime, timezone
+    out = []
+    for pc in pieces:
+        rec = None
+        try:
+            rec = schedule.scheduled_record(pc['dir'], 'note')
+        except Exception:
+            rec = None
+        if not rec or not rec.get('at'):
+            continue
+        man = pc['manifest'] or {}
+        block = man.get('substack_note') if isinstance(man.get('substack_note'), dict) else {}
+        if block.get('note_url') or block.get('skip'):
+            continue
+        try:
+            moment = schedule.parse_moment(rec['at'])
+        except Exception:
+            continue
+        if moment <= datetime.now(timezone.utc):
+            out.append((pc['name'], rec['at']))
+    return out
+
+
 def pending_until(piece_dir, outlet_cfg):
     """-> the moment this piece is due on THIS outlet, if that moment is still ahead; else None.
 
@@ -280,8 +309,9 @@ def load_pieces(pieces_dir, legacy_outlet):
         if not isinstance(declared, list):
             declared = [legacy_outlet] if (m.get('site') is True and legacy_outlet) else []
             legacy = bool(declared)
-        out.append({'name': name, 'manifest': m, 'declared': declared,
-                    'legacy': legacy, 'published': bool(m.get('published_at'))})
+        out.append({'name': name, 'dir': os.path.dirname(p), 'manifest': m,
+                    'declared': declared, 'legacy': legacy,
+                    'published': bool(m.get('published_at'))})
     return out
 
 
@@ -847,6 +877,13 @@ def main():
     for name, oname, when, how in scheduled_later:
         print(f"  scheduled   {name} is not on {oname} yet — {oname}'s own scheduler has it for "
               f"{when} ({how})")
+    # A scheduled action that never landed is the failure this whole record exists to catch —
+    # and the NOTE was the one kind nothing checked, because a Note is not an outlet. Measured
+    # 2026-09-18: a task fired on time, reported "succeeded", posted nothing, and three days
+    # passed with every check green, because each one only asked about outlets.
+    for name, when in note_never_landed(pieces):
+        print(f"  NOTE MISSING  {name}: a Note was scheduled for {when}, that moment has passed, "
+              f"and no `substack_note:` records one — the scheduled action did not land")
     for name, oname, when in unscheduled:
         print(f"  NOT SCHEDULED  {name} is due on {oname} at {when}, and nothing records a "
               f"schedule set there — intent is not a scheduler")
