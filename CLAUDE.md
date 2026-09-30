@@ -101,6 +101,15 @@ landed on shared singletons**, so those are the things with rules.
   wrote the whole file back.)* `sync` **ingests hand-edits before it renders**, so if you or
   another session edits the generated file anyway, the work is pulled back into the fragment
   rather than lost — but the fragment is the place to write.
+  **Every fragment opens with its own `## <slug>` heading** — `render` is a concatenation, so a
+  fragment that forgets it has its text folded into the PREVIOUS piece's block, where `ingest`
+  reads it as that piece's and writes the merged text down; one fragment reached 86 committed
+  copies of another piece's update block that way, growing by one per sync. `ingest` now refuses
+  any block whose address is not unique (a block rendered from two fragments, a slug held by two
+  fragments) and names it, and `check` reports a headless fragment; **and it judges which side is
+  newer from the repository's record for a clean file rather than from mtime**, because a checkout
+  stamps every file at the same moment and mtime alone reverted a published piece's fragment out
+  of a six-hours-older `DASHBOARD.md`. `sync --dry-run` prints every decision and writes nothing.
 - **Take the lease before a long edit to a piece**, and say what you are doing:
   `python3 framework/tools/lease.py acquire <slug> --what "drafting §V"`, and `release` when
   done. It is **advisory** — it stops nobody, and it is not pretending to. What it buys is that a

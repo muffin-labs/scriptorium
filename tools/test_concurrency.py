@@ -18,7 +18,7 @@ very collision these guards exist to prevent.  Fold it in when the desk is quiet
 Every case below is a failure that actually happened on 2026-09-02, or the precise inverse of
 one — the ways a fix like this goes wrong are as instructive as the bugs.
 """
-import os, sys, json, time, shutil, socket, tempfile, importlib.util
+import os, sys, json, time, shutil, socket, subprocess, tempfile, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -278,6 +278,172 @@ def test_dashboard():
               not any(f.endswith('.tmp') or '.tmp' in f for f in os.listdir(DASHBOARD_D(root))))
 
 
+# ---------------------------------------------- dashboard: the 2026-09-30 corruptions
+# Both of these ran on the real desk for weeks.  The first put 86 committed copies of one
+# piece's update block into another piece's fragment and 125 into DASHBOARD.md, growing by one
+# per sync.  The second reverted a published piece's fragment to its unpublished text out of a
+# DASHBOARD.md that was six hours older than it.
+
+def _headless_desk(tmp):
+    """A desk whose `beta` fragment forgot its `## ` heading — so render folds it into alpha."""
+    root = os.path.join(tmp, 'desk')
+    d = os.path.join(root, dashboard.FRAGDIR)
+    os.makedirs(d)
+    open(os.path.join(d, '000-preamble.md'), 'w').write('# Desk\n\npreamble text\n')
+    open(os.path.join(d, '010-alpha.md'), 'w').write(
+        '## alpha *(title **The Alpha Piece**)*\n**Stage:** one\n')
+    open(os.path.join(d, '020-beta.md'), 'w').write(
+        '\n**UPDATE: beta is published.** This block belongs to beta and has no heading.\n')
+    return root, os.path.join(d, '010-alpha.md'), os.path.join(d, '020-beta.md')
+
+
+def test_dashboard_headless_fragment():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, alpha, beta = _headless_desk(tmp)
+        dash = os.path.join(root, 'DASHBOARD.md')
+        dashboard.do_render(root, quiet=True)
+
+        marker = 'This block belongs to beta and has no heading.'
+        check('dash/headless: render puts the headless text in the file once',
+              open(dash).read().count(marker) == 1)
+        check('dash/headless: the fault is NAMED as a headless fragment',
+              dashboard.headless_fragments(root) == [beta])
+        check('dash/headless: the block it lands in is UNADDRESSABLE',
+              'alpha' in dashboard.unaddressable(root, open(dash).read()))
+
+        # The runaway: sync after sync, with DASHBOARD.md the newer side every time.
+        alpha_before = open(alpha).read()
+        for _ in range(5):
+            os.utime(dash, None)
+            time.sleep(0.01)
+            dashboard.do_ingest(root, quiet=True)
+            dashboard.do_render(root, quiet=True)
+        check('dash/headless: five syncs do NOT append the block to the neighbour',
+              open(alpha).read() == alpha_before, 'alpha fragment grew')
+        check('dash/headless: five syncs leave exactly one copy in DASHBOARD.md',
+              open(dash).read().count(marker) == 1,
+              'got %d' % open(dash).read().count(marker))
+        check('dash/headless: the headless fragment itself is untouched',
+              open(beta).read().count(marker) == 1)
+
+        # And once it is given its own heading, the normal path resumes.
+        open(beta, 'w').write('## beta *(title **Beta**)*\n**UPDATE:** %s\n' % marker)
+        dashboard.do_render(root, quiet=True)
+        check('dash/headless: a heading makes it addressable again',
+              not dashboard.headless_fragments(root)
+              and 'alpha' not in dashboard.unaddressable(root, open(dash).read()))
+        check('dash/headless: check passes once every fragment has a heading',
+              dashboard.do_check(root) == 0)
+
+
+def test_dashboard_duplicate_slug():
+    """Two fragments, one slug: ingest cannot tell which block is whose, so it writes neither."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, alpha, _beta = _headless_desk(tmp)
+        d = os.path.join(root, dashboard.FRAGDIR)
+        # No deletions in this suite: the headless beta fragment is OVERWRITTEN with a heading.
+        open(os.path.join(d, '020-beta.md'), 'w').write('## beta\n**Stage:** first beta\n')
+        open(os.path.join(d, '030-beta.md'), 'w').write('## beta\n**Stage:** second beta\n')
+        dash = os.path.join(root, 'DASHBOARD.md')
+        dashboard.do_render(root, quiet=True)
+        check('dash/dup: a slug held by two fragments is UNADDRESSABLE',
+              'beta' in dashboard.unaddressable(root, open(dash).read()))
+
+        before = [open(os.path.join(d, f)).read() for f in ('020-beta.md', '030-beta.md')]
+        live = open(dash).read().replace('**Stage:** first beta', '**Stage:** HAND EDIT')
+        open(dash, 'w').write(live)
+        os.utime(dash, None)
+        time.sleep(0.01)
+        dashboard.do_ingest(root, quiet=True)
+        after = [open(os.path.join(d, f)).read() for f in ('020-beta.md', '030-beta.md')]
+        check('dash/dup: neither duplicate fragment is written', before == after)
+
+
+def _git(root, *args, when=None):
+    """git in the temp repo ONLY.  `dashboard.git_env` strips GIT_DIR and friends, which a git
+    hook sets for everything it runs and which OVERRIDE `-C <dir>` — without that, `git init`
+    and `git commit` here would land in whatever repository invoked the suite."""
+    env = dashboard.git_env(dict(os.environ, GIT_AUTHOR_NAME='T', GIT_AUTHOR_EMAIL='t@e',
+                                 GIT_COMMITTER_NAME='T', GIT_COMMITTER_EMAIL='t@e'))
+    if when:
+        env['GIT_AUTHOR_DATE'] = env['GIT_COMMITTER_DATE'] = when
+    r = subprocess.run(['git', '-C', root] + list(args), capture_output=True, text=True, env=env)
+    return r.returncode == 0
+
+
+def test_dashboard_stale_dashboard_in_a_checkout():
+    """mtime is not provenance in a checkout: git stamps every file at checkout time.
+
+    The desk's DASHBOARD.md was committed at 12:48 and the fragment six hours later.  A clone
+    gave both the same mtime — with DASHBOARD.md's arbitrarily newer — and ingest reverted a
+    published piece's fragment to its unpublished text.  The age of a CLEAN file now comes from
+    the commit that last touched it, so the clone agrees with the history.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, 'desk')
+        d = os.path.join(root, dashboard.FRAGDIR)
+        os.makedirs(d)
+        open(os.path.join(d, '000-preamble.md'), 'w').write('# Desk\n\npreamble\n')
+        frag = os.path.join(d, '010-alpha.md')
+        open(frag, 'w').write('## alpha\n**Stage:** UNPUBLISHED\n')
+        if not _git(root, 'init', '-q'):
+            check('dash/checkout: git available', True, 'skipped — no git')
+            return
+        # A git HOOK exports GIT_DIR and GIT_WORK_TREE, and they override `-C <dir>`.  The
+        # framework's own pre-push run had GIT_DIR pointing at the submodule, so provenance read
+        # that repository instead of the desk — and this test read and WROTE there too.  Set them
+        # to a repository that is not this one for the rest of the case: everything below must
+        # still be about the temp desk.
+        os.environ['GIT_DIR'] = os.path.join(tmp, 'elsewhere', '.git')
+        os.environ['GIT_WORK_TREE'] = os.path.join(tmp, 'elsewhere')
+        os.makedirs(os.environ['GIT_WORK_TREE'], exist_ok=True)
+        dashboard.do_render(root, quiet=True)
+        dash = os.path.join(root, 'DASHBOARD.md')
+
+        # The stale generated file is committed first, at 12:48.
+        _git(root, 'add', '-A')
+        _git(root, 'commit', '-q', '-m', 'dashboard, stale', when='2026-09-18T12:48:04-04:00')
+
+        # Six hours later the fragment is updated and committed — and DASHBOARD.md is not.
+        open(frag, 'w').write('## alpha\n**Stage:** LIVE ON ALL THREE OUTLETS\n')
+        _git(root, 'commit', '-q', '-m', 'alpha published', '--', dashboard.FRAGDIR)
+
+        # A checkout: every file stamped now, DASHBOARD.md last.  mtime alone says it is newer.
+        now = time.time()
+        for pth in (frag, os.path.join(d, '000-preamble.md')):
+            os.utime(pth, (now, now))
+        os.utime(dash, (now + 1, now + 1))
+        check('dash/checkout: mtime alone would call DASHBOARD.md the newer side',
+              os.path.getmtime(dash) > os.path.getmtime(frag))
+
+        times, dirty = dashboard.provenance(root)
+        check('dash/checkout: the repository records the fragment as the newer side',
+              times and dashboard.age_of(root, frag, times, dirty)
+              > dashboard.age_of(root, dash, times, dirty))
+
+        dashboard.do_ingest(root, quiet=True)
+        check('dash/checkout: a published fragment is NOT reverted by a stale DASHBOARD.md',
+              'LIVE ON ALL THREE OUTLETS' in open(frag).read(),
+              'reverted to: %r' % open(frag).read())
+        dashboard.do_render(root, quiet=True)
+        check('dash/checkout: ...and the render carries it to the generated file',
+              'LIVE ON ALL THREE OUTLETS' in open(dash).read())
+
+        # A genuine hand edit in a DIRTY DASHBOARD.md is still ingested: there mtime is the
+        # newer fact, and refusing it would be the changeover bug back again.
+        edited = open(dash).read().replace('LIVE ON ALL THREE OUTLETS', 'HAND EDIT')
+        open(dash, 'w').write(edited)
+        os.utime(dash, None)
+        dashboard.do_ingest(root, quiet=True)
+        check('dash/checkout: an uncommitted hand edit in DASHBOARD.md IS still pulled down',
+              'HAND EDIT' in open(frag).read())
+        check('dash/checkout: an ambient GIT_DIR did not redirect the reads',
+              os.path.isdir(os.path.join(root, '.git'))
+              and not os.path.isdir(os.environ['GIT_DIR']))
+        for v in ('GIT_DIR', 'GIT_WORK_TREE'):
+            os.environ.pop(v, None)
+
+
 def DASHBOARD_D(root):
     return os.path.join(root, dashboard.FRAGDIR)
 
@@ -340,6 +506,8 @@ def main():
     print('session_port'); test_ports(); test_sha_gate()
     print('lease');        test_lease()
     print('dashboard');    test_slug_of(); test_dashboard()
+    test_dashboard_headless_fragment(); test_dashboard_duplicate_slug()
+    test_dashboard_stale_dashboard_in_a_checkout()
     print('check_refs');   test_h1_title(); test_check_refs()
     print('\n%d passed, %d failed' % (len(PASS), len(FAIL)))
     if FAIL:

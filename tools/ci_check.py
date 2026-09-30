@@ -10,11 +10,21 @@ fails. Before this, the no-deletion grep lived only in the workflow YAML — and
 2026-09-11, both repos, all day, went red on GitHub for reasons a local suite run could not see.
 
 Steps, in order:
-  1. The suite must not delete, fetch, or shell out. Its predecessor was a bash loop holding
-     `rm -f $S/*` with $S unquoted. A grep, deliberately dumb: a deletion has to be argued into
-     the suite by changing THIS file, not slipped in beside a test. A test that needs a file to
-     be absent builds the directory without it.
-  2. The regression suite.
+  1. The suites must not delete, fetch, or run a shell. Their predecessor was a bash loop
+     holding `rm -f $S/*` with $S unquoted. A grep, deliberately dumb: a deletion has to be
+     argued into a suite by changing THIS file, not slipped in beside a test. A test that needs
+     a file to be absent builds the directory without it. `test_concurrency.py` does invoke one
+     program — `git`, with an explicit argv and no shell, inside a `git init` repository of its
+     own under `tempfile.TemporaryDirectory()` — because the provenance it tests IS the
+     repository's record and there is nothing else to read it from. Step 3 is what holds that
+     honest: the real tree is hashed before and after.
+  2. The regression suites: `test_suite.py` (the corpus) and `test_concurrency.py` (the
+     multi-session guards). The second was written as a separate runner while another session
+     held `test_suite.py`, and stayed out of CI on a note saying to fold it in "when the desk is
+     quiet" — which meant the dashboard guards it covers were never gated. Two of them then
+     broke in the tree for weeks (a fragment with no heading appended a block to its neighbour
+     on every sync; a stale DASHBOARD.md reverted newer fragments in a fresh checkout). Running
+     the file is cheaper than folding it in, and it is what makes those tests a gate.
   3. The run left the tree untouched. The suite is read-only; every file present before the run
      is hashed before and after. Hashes rather than `git diff`, so it works on a `git archive`
      export with no .git; new files are ignored, as `git diff` ignores untracked ones.
@@ -29,7 +39,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMEWORK = os.path.dirname(HERE)
-SUITE = os.path.join(HERE, 'test_suite.py')
+SUITES = [os.path.join(HERE, n) for n in ('test_suite.py', 'test_concurrency.py')]
 FORBIDDEN = re.compile(r'rm -rf|shutil\.rmtree|os\.unlink|os\.remove|shell=True'
                        r'|urllib\.request\.urlopen|requests\.')
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules'}
@@ -63,18 +73,20 @@ def main():
     print(f'ci_check: {root}  (python {sys.version.split()[0]})', flush=True)
     red = False
 
-    with open(SUITE, encoding='utf-8') as f:
-        hits = [f'{n}: {line.rstrip()}' for n, line in enumerate(f, 1) if FORBIDDEN.search(line)]
-    if hits:
-        print('FAIL  test_suite.py gained a deletion, network, or shell call:\n  '
-              + '\n  '.join(hits), flush=True)
-        return 1
-    print('ok    the suite does not delete, fetch, or shell out', flush=True)
+    for suite in SUITES:
+        with open(suite, encoding='utf-8') as f:
+            hits = [f'{n}: {line.rstrip()}' for n, line in enumerate(f, 1) if FORBIDDEN.search(line)]
+        if hits:
+            print(f'FAIL  {os.path.basename(suite)} gained a deletion, network, or shell call:\n  '
+                  + '\n  '.join(hits), flush=True)
+            return 1
+    print('ok    the suites do not delete, fetch, or run a shell', flush=True)
 
     before = digest(root)
-    if subprocess.run([sys.executable, SUITE], cwd=root).returncode != 0:
-        print('FAIL  the regression suite', flush=True)
-        red = True
+    for suite in SUITES:
+        if subprocess.run([sys.executable, suite], cwd=root).returncode != 0:
+            print(f'FAIL  the regression suite {os.path.basename(suite)}', flush=True)
+            red = True
     after = digest(root)
     changed = sorted(p for p, h in before.items() if after.get(p) != h)
     if changed:

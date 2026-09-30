@@ -37,11 +37,48 @@ directions.
     dashboard.py sync     ingest, then render   [default]
     dashboard.py check    exit 1 if DASHBOARD.md differs from the fragments
 
+`ingest` and `sync` take `--dry-run`: every decision is printed and no file is written.
+
 ORDERING carries no shared state on purpose.  It lives in the filename (`NNN-slug.md`, gaps of
 ten), so adding a piece creates one new file and edits nothing.  An explicit order file would
 just be the singleton again, one indirection away.
+
+TWO WAYS THE ABOVE STILL LOST DATA, both measured on the real desk 2026-09-30, both now closed.
+
+(1) A FRAGMENT WITH NO HEADING MAKES INGEST APPEND FOREVER.  `render` is a concatenation, so a
+fragment that does not open with its own `## ` heading has its text absorbed into the PREVIOUS
+fragment's block in `DASHBOARD.md`.  `ingest` then reads that block, sees it differ from the
+previous fragment, and writes the merged text down — so the headless fragment's content is now
+in two fragments, and the next `render` emits it twice, and the next `ingest` banks the two.
+`290-none-but-he-and-i.md` reached 86 committed copies of a block belonging to
+`not-made-of-things-that-appear` this way, growing by one on every sync, across many sessions.
+The tell was in the output all along: `ingest: 1 fragment(s) absent from DASHBOARD.md and KEPT`
+— a fragment cannot be absent from a file that is generated from it unless its text arrived
+under somebody else's heading.  The same shape applies to a slug held by TWO fragments (the desk
+has two `in-vain.md`), where `ingest` cannot tell which block belongs to which file and would
+write both blocks into whichever fragment the dict kept.
+
+So ingest is now ADDRESS-CHECKED: a block is written down only when the mapping between blocks
+and fragments is one-to-one for that slug.  Anything else — a block rendered from more than one
+fragment, a slug held by more than one fragment, a slug appearing in more than one block — is
+UNADDRESSABLE and left strictly alone, named in the output with the remedy.  Merging is the one
+operation that cannot be undone by hand here, so the tool declines to guess.
+
+(2) MTIME IS NOT PROVENANCE IN A GIT CHECKOUT.  Deciding per block by mtime is right in a live
+working tree and meaningless the moment the files are checked out: `git` stamps every file with
+the checkout time, in whatever order it wrote them.  On a clean clone of the desk that made
+`DASHBOARD.md` look newer than fragments committed six hours after it, and ingest duly reverted
+them — `400-two-ways-to-lose-yourself.md` from v2.4 back to v2.3, and
+`380-scaling-computer-vision-workflows-aws.md` from live-on-three-outlets back to unpublished.
+That is the original bug exactly: a stale whole-file read overwriting somebody's newer work.
+
+So each side's age now comes from the repository's own record when the file is CLEAN (the commit
+time of the last commit that touched it) and from mtime only when it is DIRTY or untracked — the
+one state in which mtime is the newer fact.  A tie is not evidence, so a tie keeps the fragment.
+And every overwrite ingest is about to make is PRINTED, with the lines it drops, so a session
+watching a sync can stop it; `--dry-run` decides and writes nothing.
 """
-import os, re, sys
+import os, re, subprocess, sys
 
 FRAGDIR = 'DASHBOARD.d'
 DASHBOARD = 'DASHBOARD.md'
@@ -129,6 +166,165 @@ def _norm(s):
     return s if s.endswith('\n') else s + '\n'
 
 
+# ----------------------------------------------------------------- addressing
+# `render` is a concatenation, so the map from fragments to the blocks of DASHBOARD.md is only
+# one-to-one while every non-preamble fragment opens with its own `## ` heading and no slug is
+# held twice.  Where it is not, `ingest` has no way to tell whose text a block is, and writing
+# it down merges two pieces' work into one file.  These two functions are what lets ingest say
+# "I cannot address this" instead of guessing.
+
+PREAMBLE = 'preamble'
+
+
+def render_spans(root):
+    """-> (rendered_text, [(start, end, fragment_path), ...]) — render, plus who wrote what.
+
+    Exactly `render_text`'s bytes, with the provenance kept, so a block's owners are read off
+    the offsets rather than inferred from the fragments' shape.
+    """
+    parts, spans, off = [], [], 0
+    for _num, _slug, path in fragments(root):
+        with open(path) as fh:
+            chunk = _norm(fh.read())
+        parts.append(chunk)
+        spans.append((off, off + len(chunk), path))
+        off += len(chunk)
+    return ''.join(parts), spans
+
+
+def unaddressable(root, live_text=None):
+    """-> {slug: reason} for every slug ingest must not write, and why.
+
+    Three shapes, all of them the same fault — the address is not unique:
+
+      * a rendered block drawing on more than one fragment (a fragment with no `## ` heading of
+        its own, whose text lands inside its neighbour's block),
+      * a slug held by more than one fragment,
+      * a slug appearing in more than one block of the live DASHBOARD.md.
+    """
+    bad = {}
+
+    frags = fragments(root)
+    seen = {}
+    for _num, slug, path in frags:
+        seen.setdefault(slug, []).append(path)
+    for slug, paths in seen.items():
+        if len(paths) > 1:
+            bad[slug] = ('held by %d fragments (%s) — ingest cannot tell which block is which'
+                         % (len(paths), ', '.join(os.path.basename(x) for x in paths)))
+
+    text, spans = render_spans(root)
+    starts = [m.start() for m in BLOCK_RE.finditer(text)]
+    regions = [(PREAMBLE, 0, starts[0] if starts else len(text))]
+    for i, s in enumerate(starts):
+        e = starts[i + 1] if i + 1 < len(starts) else len(text)
+        regions.append((slug_of(text[s:e].split('\n', 1)[0]), s, e))
+    for slug, s, e in regions:
+        owners = [path for a, b, path in spans if a < e and b > s and b > a]
+        if len(owners) > 1:
+            names = [os.path.basename(x) for x in owners]
+            headless = [n for n in names[1:]]
+            bad[slug] = ('rendered from %d fragments (%s) — %s open%s no `## ` heading, so their '
+                         'text lands inside this block' %
+                         (len(owners), ', '.join(names), ', '.join(headless),
+                          's' if len(headless) == 1 else ''))
+
+    if live_text is not None:
+        _pre, live_blocks = parse(live_text)
+        counts = {}
+        for slug, _chunk in live_blocks:
+            counts[slug] = counts.get(slug, 0) + 1
+        for slug, n in counts.items():
+            if n > 1:
+                bad[slug] = '%d blocks with this slug in %s — the address is not unique' % (n, DASHBOARD)
+    return bad
+
+
+def headless_fragments(root):
+    """-> [path] for non-preamble fragments that do not open with a `## ` heading."""
+    out = []
+    for _num, slug, path in fragments(root):
+        if slug == PREAMBLE:
+            continue
+        with open(path) as fh:
+            if not fh.read().lstrip('\n').startswith('## '):
+                out.append(path)
+    return out
+
+
+# ------------------------------------------------------------------ provenance
+# Which side of a block is the NEWER one?  In a live working tree that is mtime.  In a fresh
+# checkout it is not: git stamps every file with the checkout time, so mtime says only in which
+# order git happened to write them.  Reading it there reverted fragments committed hours after
+# DASHBOARD.md.  So: a CLEAN file's age is the commit time of the last commit that touched it —
+# the repository's own record, which survives a clone — and mtime is used only for a file that
+# is dirty or untracked, the one state in which mtime is the newer fact.
+
+# Every git HOOK runs with GIT_DIR and GIT_WORK_TREE already set, and those OVERRIDE `-C <dir>`
+# — so a `dashboard.py sync` invoked from a hook (or from anything a hook started, the pre-push
+# CI run included) would read the ambient repository's history instead of the desk's, and decide
+# which side of a block is newer from the wrong record.  Caught 2026-09-30 by the framework's own
+# pre-push hook, whose exported CI run had GIT_DIR pointing at the submodule.  So the environment
+# is cleared of everything that can redirect a repository, and `-C root` is left as the only
+# thing saying which repository this is.
+_GIT_REDIRECTS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
+                  'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE',
+                  'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX')
+
+
+def git_env(base=None):
+    """A copy of the environment with every repository-redirecting GIT_* variable removed."""
+    env = dict(os.environ if base is None else base)
+    for var in _GIT_REDIRECTS:
+        env.pop(var, None)
+    return env
+
+
+def _git(root, args):
+    try:
+        r = subprocess.run(['git', '-C', root] + args, capture_output=True, text=True,
+                           timeout=30, env=git_env())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def provenance(root, paths=(DASHBOARD, FRAGDIR)):
+    """-> (commit_times, dirty) keyed by repo-relative path; ({}, set()) outside a checkout."""
+    out = _git(root, ['log', '--format=@%ct', '--name-only', '--'] + list(paths))
+    if out is None:
+        return {}, set()
+    times, when = {}, None
+    for line in out.splitlines():
+        if line.startswith('@'):
+            when = int(line[1:])
+        elif line.strip() and when is not None:
+            times.setdefault(line.strip(), when)      # --name-only is newest-first
+    dirty = set()
+    st = _git(root, ['status', '--porcelain', '--'] + list(paths))
+    for line in (st or '').splitlines():
+        if len(line) > 3:
+            dirty.add(line[3:].split(' -> ')[-1].strip().strip('"'))
+    return times, dirty
+
+
+def age_of(root, path, times, dirty):
+    """The time to compare this side on, or None if the file is not there."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    rel = os.path.relpath(os.path.abspath(path), os.path.abspath(root)).replace(os.sep, '/')
+    if rel in dirty or rel not in times:
+        return mtime                                  # uncommitted: mtime is the newer fact
+    return float(times[rel])                          # committed and clean: the repo's record
+
+
+def _dropped_lines(old, new):
+    keep = set(new.splitlines())
+    return [l for l in old.splitlines() if l.strip() and l not in keep]
+
+
 def do_split(root, force=False):
     path = os.path.join(root, DASHBOARD)
     with open(path) as fh:
@@ -174,7 +370,7 @@ def do_render(root, quiet=False):
     return 0
 
 
-def do_ingest(root, quiet=False):
+def do_ingest(root, quiet=False, dry_run=False):
     """Pull hand-edits made directly in DASHBOARD.md back down into the fragments.
 
     This is what makes the changeover safe, and it stays useful afterwards: any session or
@@ -182,57 +378,113 @@ def do_ingest(root, quiet=False):
     work has to survive that.  A block with no fragment is a NEW piece and gets one.  A fragment
     with no block is reported and NEVER deleted — the absence may just mean the other side is
     stale, and deleting somebody's block on that guess is the original bug wearing a new hat.
+
+    Two refusals stand in front of every write, and both exist because the write happened:
+
+      * UNADDRESSABLE — the block-to-fragment map is not one-to-one for this slug, so the block
+        is some other piece's text as well.  Writing it down merges them, and the merge feeds
+        itself on every later sync.  Never written; always named.
+      * the fragment is the NEWER side, judged on the repository's record for a clean file and
+        on mtime only for a dirty one.  mtime alone said DASHBOARD.md was newer in a fresh
+        checkout, where it is only the file git wrote last.
+
+    Whatever survives both is printed before it is written, with the lines it drops.
     """
     path = os.path.join(root, DASHBOARD)
     if not os.path.isfile(path):
         return 0
-    dash_mtime = os.path.getmtime(path)
-
-    def newer_on_disk(frag):
-        """Is DASHBOARD.md the newer side for this block?  If not, leave the fragment alone."""
-        try:
-            return dash_mtime > os.path.getmtime(frag) + 1e-6
-        except OSError:
-            return True          # no fragment yet: the dashboard is all there is
 
     with open(path) as fh:
-        preamble, blocks = parse(fh.read())
+        live = fh.read()
+    preamble, blocks = parse(live)
     frags = fragments(root)
     by_slug = {slug: (num, p) for num, slug, p in frags}
-    changed, added, kept = [], [], []
 
-    pre_num, pre_path = by_slug.get('preamble', (0, frag_path(root, 0, 'preamble')))
-    if newer_on_disk(pre_path) and (not os.path.isfile(pre_path)
-                                    or _norm(open(pre_path).read()) != _norm(preamble)):
-        _atomic_write(pre_path, _norm(preamble))
-        changed.append('preamble')
+    blocked = unaddressable(root, live)
+    times, dirty = provenance(root)
+    dash_age = age_of(root, path, times, dirty)
+
+    def dashboard_is_newer(frag):
+        """Is DASHBOARD.md the newer side for this block?  A tie is not evidence: keep the
+        fragment, because a merge is the loss that cannot be undone by hand."""
+        frag_age = age_of(root, frag, times, dirty)
+        if frag_age is None:
+            return True                      # no fragment yet: the dashboard is all there is
+        if dash_age is None:
+            return False
+        return dash_age > frag_age + 1e-6
+
+    changed, added, kept, refused, overwrites = [], [], [], [], []
+
+    pre_num, pre_path = by_slug.get(PREAMBLE, (0, frag_path(root, 0, PREAMBLE)))
+    have_pre = os.path.isfile(pre_path)
+    if PREAMBLE in blocked:
+        if have_pre and _norm(open(pre_path).read()) != _norm(preamble):
+            refused.append(PREAMBLE)
+    elif dashboard_is_newer(pre_path) and (not have_pre
+                                           or _norm(open(pre_path).read()) != _norm(preamble)):
+        if have_pre:
+            overwrites.append((PREAMBLE, pre_path, _dropped_lines(open(pre_path).read(), preamble)))
+        if not dry_run:
+            _atomic_write(pre_path, _norm(preamble))
+        changed.append(PREAMBLE)
 
     nxt = (max([n for n, _, _ in frags], default=0) // 10 + 1) * 10
     for slug, chunk in blocks:
         if slug in by_slug:
             _num, p = by_slug[slug]
-            if _norm(open(p).read()) != _norm(chunk):
-                if newer_on_disk(p):
+            current = open(p).read()
+            if _norm(current) == _norm(chunk):
+                continue
+            if slug in blocked:
+                refused.append(slug)           # the address is not unique — never merge on a guess
+            elif dashboard_is_newer(p):
+                overwrites.append((slug, p, _dropped_lines(current, chunk)))
+                if not dry_run:
                     _atomic_write(p, _norm(chunk))
-                    changed.append(slug)
-                else:
-                    kept.append(slug)      # the fragment is the newer side: the normal workflow
+                changed.append(slug)
+            else:
+                kept.append(slug)              # the fragment is the newer side: the normal workflow
+        elif slug in blocked:
+            refused.append(slug)
         else:
-            _atomic_write(frag_path(root, nxt, slug), _norm(chunk))
+            if not dry_run:
+                _atomic_write(frag_path(root, nxt, slug), _norm(chunk))
             added.append(slug)
             nxt += 10
 
-    seen = {s for s, _ in blocks} | {'preamble'}
+    seen = {s for s, _ in blocks} | {PREAMBLE}
     orphans = [s for _n, s, _p in frags if s not in seen]
+    headless = headless_fragments(root)
     if not quiet:
+        tag = 'ingest (dry run): would update' if dry_run else 'ingest: updated'
         if changed or added:
-            print('ingest: updated %d, added %d  (%s)' %
-                  (len(changed), len(added), ', '.join(changed + ['+' + a for a in added])))
+            print('%s %d, add%s %d  (%s)' %
+                  (tag, len(changed), 'ed' if not dry_run else '', len(added),
+                   ', '.join(changed + ['+' + a for a in added])))
         else:
             print('ingest: nothing to pull down from %s' % DASHBOARD)
+        for slug, p, dropped in overwrites:
+            print('ingest: %s %s from %s  (%d line(s) dropped)'
+                  % ('WOULD OVERWRITE' if dry_run else 'OVERWROTE',
+                     os.path.relpath(p, root), DASHBOARD, len(dropped)))
+            for line in dropped[:3]:
+                print('           - %s' % (line[:140] + ('…' if len(line) > 140 else '')))
+            if len(dropped) > 3:
+                print('           - … %d more' % (len(dropped) - 3))
         if kept:
             print('ingest: %d fragment(s) newer than %s, kept: %s'
                   % (len(kept), DASHBOARD, ', '.join(kept)))
+        if refused:
+            print('ingest: %d block(s) REFUSED — the address is not unique, so nothing was written:'
+                  % len(refused))
+            for slug in refused:
+                print('  %s: %s' % (slug, blocked[slug]))
+        if headless:
+            print('ingest: %d fragment(s) with NO `## ` HEADING — give each one its own heading '
+                  'so it renders as its own block:' % len(headless))
+            for p in headless:
+                print('  %s' % os.path.relpath(p, root))
         if orphans:
             print('ingest: %d fragment(s) absent from %s and KEPT: %s'
                   % (len(orphans), DASHBOARD, ', '.join(orphans)))
@@ -267,6 +519,11 @@ def do_check(root):
     print('check: %s DIFFERS from its fragments' % DASHBOARD)
     for d in drift or ['(whitespace/ordering only)']:
         print('  ' + d)
+    for pth in headless_fragments(root):
+        print('  %s: NO `## ` HEADING — its text renders inside the previous block, so it reads '
+              'to `ingest` as that block\'s and cannot round-trip' % os.path.relpath(pth, root))
+    for slug, why in sorted(unaddressable(root, live).items()):
+        print('  %s: UNADDRESSABLE — %s' % (slug, why))
     print('run `dashboard.py sync` — it ingests hand-edits before rendering, so nothing is lost')
     return 1
 
@@ -277,16 +534,19 @@ def main(argv):
         return 0
     cmd = argv[1] if len(argv) > 1 else 'sync'
     root = instance_root()
+    dry = '--dry-run' in argv
     if cmd == 'split':
         return do_split(root, force='--force' in argv)
     if cmd == 'render':
         return do_render(root)
     if cmd == 'ingest':
-        return do_ingest(root)
+        return do_ingest(root, dry_run=dry)
     if cmd == 'check':
         return do_check(root)
     if cmd == 'sync':
-        rc = do_ingest(root)
+        rc = do_ingest(root, dry_run=dry)
+        if dry:
+            return rc                      # --dry-run decides and writes nothing, either side
         return rc or do_render(root)
     sys.stderr.write('dashboard: unknown command %r (split|ingest|render|sync|check)\n' % cmd)
     return 2

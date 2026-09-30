@@ -21,6 +21,39 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **`dashboard.py sync` no longer merges two pieces' fragments, and no longer reverts a fragment
+  out of a stale `DASHBOARD.md`.** Two corruptions, both measured on a real desk 2026-09-30, both
+  running for weeks in the committed tree. **(1) A fragment with no `## ` heading of its own has
+  its text rendered inside the PREVIOUS fragment's block**, so `ingest` read that block as the
+  neighbour's and wrote the merged text down — and the next render emitted it twice, and the next
+  ingest banked the two. One fragment reached **86 committed copies** of another piece's update
+  block and the generated file **125**, growing by one on every sync, across many sessions. The
+  same shape applies to a slug held by two fragments, where `ingest` cannot tell which block
+  belongs to which file. `ingest` is now **address-checked**: a block is written down only where
+  the block-to-fragment map is one-to-one for that slug; a block rendered from more than one
+  fragment, a slug held by more than one fragment, and a slug appearing in more than one block
+  are each **UNADDRESSABLE**, left strictly alone, and named with the remedy. `check` reports a
+  headless fragment by name. **(2) mtime is not provenance in a git checkout** — git stamps every
+  file at checkout time, in whatever order it wrote them, which made a `DASHBOARD.md` committed at
+  12:48 look newer than fragments committed six hours later, and ingest duly reverted them (a
+  published piece back to unpublished, a draft back one version). A **clean** file's age is now the
+  commit time of the last commit that touched it, and mtime is read only for a file that is dirty
+  or untracked; a tie keeps the fragment. Every overwrite ingest is about to make is **printed**
+  with the lines it drops, and `ingest`/`sync` take `--dry-run`.
+  Both reads go through a git environment stripped of `GIT_DIR`, `GIT_WORK_TREE` and the other
+  repository-redirecting `GIT_*` variables: a git **hook** sets those for everything it runs, and
+  they override `-C <dir>`, so a `sync` invoked from a hook would have read the ambient
+  repository's history instead of the desk's. The framework's own pre-push run found this by
+  going red — `GIT_DIR` pointed at the submodule — and a test case now sets those variables to a
+  third repository and proves every read and write still lands in the one under test.
+- **`ci_check.py` now runs `test_concurrency.py` as well as `test_suite.py`.** The multi-session
+  guards were written as a separate runner while another session held `test_suite.py` and stayed
+  out of CI on a note saying to fold them in later — so the dashboard guards were never a gate,
+  and the two faults above sat in the tree. Running the second file is cheaper than folding it in.
+  (`test_concurrency.py` invokes `git` with an explicit argv and no shell, inside a repository of
+  its own under `tempfile.TemporaryDirectory()`, because the provenance it tests *is* the
+  repository's record; the tree-untouched hash check is what holds that honest.)
+
 - **The reference sweep — a convention for reading a shelf larger than the context window.**
   `docs/REFERENCE-SWEEP.md`, and a section in `CLAUDE.md`. `references.py search` answers any
   question with a phrase in it; a question with none goes to a cheap-model subagent that returns
