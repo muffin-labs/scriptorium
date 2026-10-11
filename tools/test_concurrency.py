@@ -23,7 +23,7 @@ import os, sys, json, time, shutil, socket, subprocess, tempfile, importlib.util
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import session_port, lease, dashboard, check_refs        # noqa: E402
+import session_port, lease, dashboard, check_refs, prepush   # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -459,6 +459,94 @@ def test_slug_of():
         check('slug_of: %s' % want, got == want, 'got %r' % got)
 
 
+# ------------------------------------------------- prepush: the framework pointer guard
+# A SIBLING SESSION'S PUSH used to make this hook refuse a correct pointer.  The guard read
+# `refs/remotes/origin/main` as it stood — this clone's MEMORY of the remote, not the remote — so
+# once another session pushed the framework, a pointer that was on origin/main all along was
+# refused with "push the framework first".  On a desk running six sessions that is the ordinary
+# case.  Everything below uses a local repository as `origin`: no network.
+
+def test_prepush_pointer():
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = os.path.join(tmp, 'remote')
+        os.makedirs(remote)
+        if not _git(remote, 'init', '-q', '-b', 'main'):
+            check('prepush: git available', True, 'skipped — no git')
+            return
+        open(os.path.join(remote, 'VERSION'), 'w').write('0.1.0\n')
+        _git(remote, 'add', '-A'); _git(remote, 'commit', '-q', '-m', 'first')
+        first = prepush.git_out(remote, 'rev-parse', 'HEAD')
+        open(os.path.join(remote, 'VERSION'), 'w').write('0.2.0\n')
+        _git(remote, 'commit', '-q', '-am', 'second')
+        second = prepush.git_out(remote, 'rev-parse', 'HEAD')
+
+        clone = os.path.join(tmp, 'clone')
+        _git(tmp, 'clone', '-q', remote, clone)
+        check('prepush: the default branch is asked of the REMOTE', 
+              prepush.default_branch(clone) == 'main', prepush.default_branch(clone))
+
+        # The sibling-session case: this clone's tracking ref is one commit behind the remote.
+        _git(clone, 'update-ref', 'refs/remotes/origin/main', first)
+        ok_old, _n = prepush.pointer_ok(clone, second, fetch=False)
+        check('prepush: WITHOUT the fetch, a pointer that IS on origin/main is refused '
+              "(the bug: a sibling's push left this clone behind)", not ok_old)
+        ok_new, note = prepush.pointer_ok(clone, second)
+        check('prepush: fetching first, the same pointer is allowed', ok_new and note is None,
+              str(note))
+
+        # A commit that exists only here is still refused, and the message says which case it is.
+        open(os.path.join(clone, 'VERSION'), 'w').write('0.3.0\n')
+        _git(clone, 'commit', '-q', '-am', 'local only')
+        local = prepush.git_out(clone, 'rev-parse', 'HEAD')
+        ok3, note3 = prepush.pointer_ok(clone, local)
+        check('prepush: an unpushed pointer is still refused', not ok3)
+        check('prepush: ...and the message says no remote branch has it, not "merge it"',
+              'No remote branch contains it' in (note3 or ''), str(note3))
+
+        # On a side branch: refused, and the message NAMES the branch and says to merge it.
+        _git(clone, 'push', '-q', 'origin', 'HEAD:refs/heads/side/work')
+        ok4, note4 = prepush.pointer_ok(clone, local)
+        check('prepush: a pointer on a side branch is refused — actions/checkout fetches '
+              'submodules shallow, so CI gets the default branch and not a side one', not ok4)
+        check('prepush: ...and the message names the branch it IS on, so the remedy is obvious',
+              'side/work' in (note4 or '') and 'merge it into main' in (note4 or ''), str(note4))
+
+        # A branch name with a slash in it survives: `rsplit('/', 1)` would have returned `work`.
+        remote2 = os.path.join(tmp, 'remote2')
+        os.makedirs(remote2)
+        _git(remote2, 'init', '-q', '-b', 'claude/nice-feynman')
+        open(os.path.join(remote2, 'F'), 'w').write('x\n')
+        _git(remote2, 'add', '-A'); _git(remote2, 'commit', '-q', '-m', 'first')
+        clone2 = os.path.join(tmp, 'clone2')
+        _git(tmp, 'clone', '-q', remote2, clone2)
+        check('prepush: a default branch with a slash is not truncated at the last one',
+              prepush.default_branch(clone2) == 'claude/nice-feynman',
+              prepush.default_branch(clone2))
+
+        # AMBIENT GIT_DIR, which is the environment this tool actually runs in: `prepush.py` is
+        # invoked from `.githooks/pre-push`, where git guarantees GIT_DIR is set, and GIT_DIR
+        # overrides `cwd=`.  Every question below is about `clone`, so a third repository in the
+        # environment must change none of the answers.  The hook caught this on its own tooling.
+        third = os.path.join(tmp, 'third')
+        os.makedirs(third)
+        _git(third, 'init', '-q', '-b', 'main')
+        os.environ['GIT_DIR'] = os.path.join(third, '.git')
+        os.environ['GIT_WORK_TREE'] = third
+        check('prepush: an ambient GIT_DIR does not redirect the default-branch question',
+              prepush.default_branch(clone) == 'main', prepush.default_branch(clone))
+        ok_amb, _n = prepush.pointer_ok(clone, second)
+        check('prepush: ...nor the pointer verdict', ok_amb, str(_n))
+        for v in ('GIT_DIR', 'GIT_WORK_TREE'):
+            os.environ.pop(v, None)
+
+        # Offline: the verdict may rest on a stale ref, and it has to SAY so rather than
+        # asserting a refusal it cannot stand behind.
+        _git(clone, 'remote', 'set-url', 'origin', os.path.join(tmp, 'gone'))
+        _ok5, note5 = prepush.pointer_ok(clone, local)
+        check('prepush: when the fetch cannot run, the refusal names its own uncertainty',
+              'possibly stale' in (note5 or ''), str(note5))
+
+
 # ---------------------------------------------------------------- check_refs
 def test_check_refs():
     with tempfile.TemporaryDirectory() as tmp:
@@ -505,6 +593,7 @@ def test_h1_title():
 def main():
     print('session_port'); test_ports(); test_sha_gate()
     print('lease');        test_lease()
+    print('prepush');      test_prepush_pointer()
     print('dashboard');    test_slug_of(); test_dashboard()
     test_dashboard_headless_fragment(); test_dashboard_duplicate_slug()
     test_dashboard_stale_dashboard_in_a_checkout()

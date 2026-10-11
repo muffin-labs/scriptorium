@@ -263,21 +263,11 @@ def headless_fragments(root):
 # Every git HOOK runs with GIT_DIR and GIT_WORK_TREE already set, and those OVERRIDE `-C <dir>`
 # — so a `dashboard.py sync` invoked from a hook (or from anything a hook started, the pre-push
 # CI run included) would read the ambient repository's history instead of the desk's, and decide
-# which side of a block is newer from the wrong record.  Caught 2026-09-30 by the framework's own
-# pre-push hook, whose exported CI run had GIT_DIR pointing at the submodule.  So the environment
-# is cleared of everything that can redirect a repository, and `-C root` is left as the only
-# thing saying which repository this is.
-_GIT_REDIRECTS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
-                  'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE',
-                  'GIT_CEILING_DIRECTORIES', 'GIT_PREFIX')
-
-
-def git_env(base=None):
-    """A copy of the environment with every repository-redirecting GIT_* variable removed."""
-    env = dict(os.environ if base is None else base)
-    for var in _GIT_REDIRECTS:
-        env.pop(var, None)
-    return env
+# which side of a block is newer from the wrong record.  Caught 2026-10-03 by the framework's own
+# pre-push hook, whose exported CI run had GIT_DIR pointing at the submodule.  The filter lives in
+# `gitenv.py` because the same trap caught `prepush.py` on 2026-10-11; `-C root` is then the
+# only thing that says which repository this is.
+from gitenv import git_env                                              # noqa: E402
 
 
 def _git(root, args):

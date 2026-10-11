@@ -15,8 +15,19 @@ for the instance, the framework too, at the pointer that commit records — and 
 same command the workflows run, runs there in a venv holding requirements-ci.txt and nothing
 else from this machine.
 
-It also refuses an instance push whose framework pointer is not on the framework's origin/main:
-CI's checkout cannot fetch a commit that was never pushed. (Push the framework first.)
+It also refuses an instance push whose framework pointer is not on the framework's DEFAULT
+BRANCH. The reason is not that the commit cannot be fetched — github.com serves any commit
+reachable from any ref — it is that `actions/checkout` clones submodules SHALLOW (fetch-depth 1
+by default), so what CI reliably has in `framework/` is the default branch's tip and its
+history. A pointer at a commit that lives only on a side branch resolves on this machine and
+fails on the runner, which is the exact class of failure this hook exists to catch.
+
+That verdict is taken against the REMOTE, FETCHED FIRST — not against this clone's memory of it.
+Measured 2026-10-11: the check read `refs/remotes/origin/main` without fetching, so a sibling
+session pushing the framework left this clone's tracking ref behind and the hook refused a
+pointer that WAS on origin/main. On a desk where six sessions run at once that is the ordinary
+case, not an exotic one. When the fetch cannot run (offline), the verdict falls back to the local
+ref and SAYS SO rather than refusing with a confident wrong reason.
 
 `git push --no-verify` skips all of it. Don't: a red CI run you were warned about is still red.
 """
@@ -29,13 +40,17 @@ import tarfile
 import tempfile
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gitenv import git_env        # a hook's GIT_DIR overrides cwd= — see gitenv.py
+
+
 ZERO = '0' * 40
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMEWORK = os.path.dirname(HERE)
 
 
 def git(*args, cwd=None):
-    r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, env=git_env())
     if r.returncode != 0:
         raise SystemExit(f'prepush: git {" ".join(args)} failed: {r.stderr.strip()}')
     return r.stdout.strip()
@@ -44,7 +59,8 @@ def git(*args, cwd=None):
 def export(repo, sha, dest):
     """Unpack the tree of `sha` into dest — the committed bytes, not the working tree."""
     os.makedirs(dest, exist_ok=True)
-    p = subprocess.Popen(['git', 'archive', '--format=tar', sha], cwd=repo, stdout=subprocess.PIPE)
+    p = subprocess.Popen(['git', 'archive', '--format=tar', sha], cwd=repo,
+                         stdout=subprocess.PIPE, env=git_env())
     with tarfile.open(fileobj=p.stdout, mode='r|') as tf:
         try:
             tf.extractall(dest, filter='data')
@@ -88,6 +104,69 @@ def venv_python(repo, req):
     return venv_bin(venv)
 
 
+def git_out(cwd, *args):
+    """stdout of a git command, or '' — for questions where failure is an answer."""
+    r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, env=git_env())
+    return r.stdout.strip() if r.returncode == 0 else ''
+
+
+def default_branch(fw):
+    """The framework's own default branch — asked of the REMOTE, not assumed to be `main`.
+
+    Two traps, both hit while writing this.  `refs/remotes/origin/HEAD` is set at clone time and
+    is this clone's guess: a clone taken from a local path inherits whatever branch that path had
+    checked out, so it named a side branch here.  And the prefix must be STRIPPED, not split on
+    the last slash — `claude/nice-feynman-oxrv57` is one branch name, and `rsplit('/', 1)` turns
+    it into `nice-feynman-oxrv57`, a branch that does not exist.
+    """
+    for line in git_out(fw, 'ls-remote', '--symref', 'origin', 'HEAD').splitlines():
+        if line.startswith('ref:'):                       # "ref: refs/heads/main\tHEAD"
+            name = line.split()[1]
+            return name[len('refs/heads/'):] if name.startswith('refs/heads/') else name
+    ref = git_out(fw, 'symbolic-ref', 'refs/remotes/origin/HEAD')
+    prefix = 'refs/remotes/origin/'
+    return ref[len(prefix):] if ref.startswith(prefix) else 'main'
+
+
+def pointer_ok(fw, sha, fetch=True):
+    """Is this framework pointer one CI will be able to check out?  -> (ok, note or None).
+
+    Judged against the remote's default branch AFTER FETCHING IT.  The old version read
+    `refs/remotes/origin/main` as it stood, which is this clone's memory of the remote and not
+    the remote: a sibling session's framework push left it behind and the hook then refused a
+    pointer that was on origin/main all along.  Fetch first, and when the fetch cannot run, say
+    the verdict rests on a possibly stale ref instead of asserting it.
+    """
+    branch = default_branch(fw)
+    stale = False
+    if fetch:
+        r = subprocess.run(['git', 'fetch', '--quiet', 'origin', branch],
+                           cwd=fw, capture_output=True, text=True, env=git_env())
+        stale = r.returncode != 0
+    ref = 'origin/%s' % branch
+    if subprocess.run(['git', 'rev-parse', '--verify', '--quiet', ref + '^{commit}'],
+                      cwd=fw, capture_output=True, env=git_env()).returncode:
+        # No ref to judge against at all.  Allowing with a warning beats blocking on a question
+        # we cannot answer: the CI run on the exported tree still happens, and GitHub is the
+        # backstop.  Silence here would be the bad option, not leniency.
+        return True, f'cannot resolve {ref}, so the framework pointer was NOT checked'
+    if subprocess.run(['git', 'merge-base', '--is-ancestor', sha, ref],
+                      cwd=fw, capture_output=True, env=git_env()).returncode == 0:
+        return True, None
+    where = [b.strip() for b in git_out(fw, 'branch', '-r', '--contains', sha).splitlines()
+             if b.strip() and '->' not in b]
+    note = (f'which is not on the framework\'s {ref}. `actions/checkout` fetches submodules '
+            f'SHALLOW, so CI gets that branch and not a side one.')
+    if where:
+        note += ' It is on ' + ', '.join(where) + f' — merge it into {branch} and push.'
+    else:
+        note += ' No remote branch contains it — push the framework first.'
+    if stale:
+        note += (f' (Could not fetch origin/{branch}, so this verdict rests on a possibly stale '
+                 f'ref; `git -C framework fetch origin {branch}` and re-run to be sure.)')
+    return False, note
+
+
 def check_commit(repo, sha):
     short = sha[:10]
     with tempfile.TemporaryDirectory(prefix='prepush-') as tmp:
@@ -97,13 +176,16 @@ def check_commit(repo, sha):
         sub = gitlink(repo, sha)
         if sub:
             fw = os.path.join(repo, 'framework')
-            if subprocess.run(['git', 'cat-file', '-e', sub + '^{commit}'], cwd=fw).returncode:
+            if subprocess.run(['git', 'cat-file', '-e', sub + '^{commit}'], cwd=fw,
+                              env=git_env()).returncode:
                 print(f'prepush: {short} points framework at {sub[:10]}, which this clone does not have.')
                 return 1
-            if subprocess.run(['git', 'merge-base', '--is-ancestor', sub, 'origin/main'], cwd=fw).returncode:
-                print(f'prepush: {short} points framework at {sub[:10]}, which is not on the framework\'s '
-                      f'origin/main. Push the framework first — CI cannot check out a commit it cannot fetch.')
+            ok, note = pointer_ok(fw, sub)
+            if not ok:
+                print(f'prepush: {short} points framework at {sub[:10]}, {note}')
                 return 1
+            if note:
+                print(f'prepush: warning — {note}')
             export(fw, sub, os.path.join(root, 'framework'))
             base = os.path.join(root, 'framework')
         else:

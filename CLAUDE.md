@@ -182,8 +182,15 @@ landed on shared singletons**, so those are the things with rules.
   runner doesn't, a guard that lived only in the workflow, and other sessions' uncommitted files
   making the committed tree look whole.) **Once per clone:** `python3 framework/tools/prepush.py
   install` sets `core.hooksPath=.githooks` in the instance and the framework and builds the venv.
-  An instance push whose framework pointer is not on the framework's origin/main is refused — push
-  the framework first. A new third-party import goes into `framework/requirements-ci.txt` in the
+  An instance push whose framework pointer is not on the framework's **default branch** is
+  refused — **not** because CI cannot fetch the commit (github.com serves any commit reachable
+  from a ref) but because `actions/checkout` fetches submodules **shallow**, so the runner has
+  that branch's history and not a side branch's. The hook **fetches before it judges**: it used
+  to read this clone's `refs/remotes/origin/main`, which is a memory of the remote rather than
+  the remote, so a sibling session's framework push made it refuse pointers that were on
+  origin/main all along. A genuine refusal now names the branch the commit IS on, so the remedy
+  reads *merge it into main* rather than *push the framework first*, and a verdict reached with
+  no network says it may rest on a stale ref. A new third-party import goes into `framework/requirements-ci.txt` in the
   same commit, or CI and the hook both go red.
 
 ## The framework is a fork, and it is versioned

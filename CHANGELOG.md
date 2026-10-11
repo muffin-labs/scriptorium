@@ -21,6 +21,33 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **`prepush.py` fetches before it judges the framework pointer, and says what it actually
+  checked.** The guard read `refs/remotes/origin/main` as it stood — this clone's MEMORY of the
+  remote, not the remote — so once a sibling session pushed the framework, an instance push whose
+  pointer was on origin/main all along was refused with *"push the framework first"*. On a desk
+  running six sessions at once that is the ordinary case. It now fetches the default branch first,
+  and when the fetch cannot run it says the verdict may rest on a stale ref instead of asserting
+  a refusal it cannot stand behind. **The default branch is asked of the remote** (`ls-remote
+  --symref`) rather than assumed to be `main`, and the name is taken by stripping `refs/heads/`
+  rather than splitting on the last slash — `claude/nice-feynman-oxrv57` is one branch name, and
+  the obvious `rsplit('/', 1)` turns it into a branch that does not exist. **The stated reason is
+  corrected too:** the rule is not that CI cannot fetch the commit (github.com serves any commit
+  reachable from a ref) but that `actions/checkout` fetches submodules SHALLOW, so the runner has
+  the default branch's history and not a side branch's — the rule stands, its old explanation did
+  not. A genuine refusal now names the branch the commit IS on, so the remedy reads *merge it
+  into main* instead of *push the framework first*. Nine cases in `test_concurrency.py`, against a
+  local repository as `origin` — no network.
+- **`gitenv.py`: one named place for the `GIT_*` variables that silently redirect a repository.**
+  A git hook always runs with `GIT_DIR` and `GIT_WORK_TREE` set, and they override `-C <dir>` and
+  `cwd=` — so a tool asking about one repository, under a hook or under anything a hook started,
+  gets the answer for another one, silently and with a zero exit status. It caught `dashboard.py`
+  on 2026-10-03 and `prepush.py` on 2026-10-11, the latter being a tool that is *only* ever run
+  from a hook, so every repository question it asked was answerable about the wrong repository.
+  All seven of `prepush.py`'s git calls now pass `git_env()`; `dashboard.py` imports the filter
+  instead of carrying its own copy and still exports `git_env` for its callers. Both were found
+  by the pre-push hook refusing a push, which is the gate catching, in its own tooling, exactly
+  the class of fault it exists for.
+
 - **`check_status.py` gains `stage`: a live piece's `**Stage:**` line must SAY it is published.**
   The existing `unpublished` finding is a list of seven phrases and only ever sees a
   *contradiction*, so a Stage line can be wrong without using one. Measured 2026-10-11:
