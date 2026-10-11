@@ -127,7 +127,15 @@ landed on shared singletons**, so those are the things with rules.
   claim about the past — and five pieces in three days went on being described as drafts after
   they were live (*In Vain*, *The Mask Comes Off Last*, *Rising After Falls*, *What Was Already
   There*, *Not Made of Things That Appear*). `check_status.py --outlets publishing/outlets.yaml`
-  reports prose that contradicts a manifest. `check_refs.py` reports a piece named by a title it
+  reports prose that contradicts a manifest — **and since 2026-10-11 a live piece whose
+  `**Stage:**` line does not SAY so** (`stage`), wherever the PATH names the piece
+  (`DASHBOARD.d/NNN-<slug>.md`, `pieces/<slug>/README.md`). That one is POSITIVE rather than a
+  contradiction, because a Stage line can be wrong without contradicting anything: *In Vain*'s
+  fragment read *stood up … Nothing drafted* for twenty-four days **above its own PUBLISHED line
+  four lines down**, so the file's history was right and only its head was stale. A Stage line
+  satisfies it by saying *published · live · shipped · re-synced* or by carrying one of the
+  piece's own reader URLs; *"Eric clicks Publish"* does not. It found five more pieces in that
+  state on its first run. `check_refs.py` reports a piece named by a title it
   no longer has — in book indexes too, in their `*Title* (`slug`)` form — and a README H1 that
   disagrees with its manifest's title; a retitle that reached one file and not the other is how
   *The Door and the Room* outlived its piece by four days. **Both are gated: the suite runs them
