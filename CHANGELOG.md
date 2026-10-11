@@ -21,6 +21,26 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **`check_status.py` gains `stage`: a live piece's `**Stage:**` line must SAY it is published.**
+  The existing `unpublished` finding is a list of seven phrases and only ever sees a
+  *contradiction*, so a Stage line can be wrong without using one. Measured 2026-10-11:
+  `DASHBOARD.d/278-in-vain.md` read *"stood up 2026-09-03 … Nothing drafted"* for twenty-four days
+  after publication while the SAME FILE, four lines down, carried **PUBLISHED 2026-09-09** and the
+  reader URL — the append-only history was right and only the head was stale, which is the one
+  shape neither a phrase list nor a whole-file search can catch. *"Nothing drafted"* is a stronger
+  claim than *"unpublished"* and matched nothing. The new check is **positive** rather than
+  negative, and it is checked only where the PATH names the piece — `DASHBOARD.d/NNN-<slug>.md`
+  and `pieces/<slug>/README.md` — so there is no guessing at the subject; a Stage line satisfies
+  it by carrying *published · live · shipped · re-synced* or one of the piece's own reader URLs.
+  *"Eric clicks Publish"* deliberately does not satisfy it, and a line marking its own
+  supersession is exempt as everywhere else here. A second weakness fell out of the same change:
+  `unpublished` identifies its subject by a backticked `` `slug` `` near the words, so it had also
+  missed a fragment reading *"COMPOSED … as a PRIVATE DRAFT … awaiting Eric's Publish"* — a phrase
+  that IS on the list — because the fragment never backticks its own slug. The path-based subject
+  has no such hole. **Turning it on found five more pieces in the same state and no false
+  positives**, two of them READMEs, which this desk calls truth. Eight cases in `test_suite.py`,
+  gated by `corpus_prose`.
+
 - **`dashboard.py sync` no longer merges two pieces' fragments, and no longer reverts a fragment
   out of a stale `DASHBOARD.md`.** Two corruptions, both measured on a real desk 2026-09-30, both
   running for weeks in the committed tree. **(1) A fragment with no `## ` heading of its own has

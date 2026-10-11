@@ -22,12 +22,28 @@ WHY (2026-09-09, four times in one week)
   * The charter still called the Fellowship's domain "open, and Eric's call" after the
     site had shipped. See the limits below: this one is not mechanically visible.
 
+AND THE SHAPE THE PHRASE LIST COULD NOT SEE (2026-10-11), which is why `stage` exists
+
+  * *In Vain* again. `DASHBOARD.d/278-in-vain.md` read "stood up 2026-09-03 … Nothing
+    drafted" for TWENTY-FOUR DAYS after publication — while the same file, four lines
+    further down, carried **PUBLISHED 2026-09-09** and the reader URL. Nothing was
+    contradicted: the file's append-only history was right and only its HEAD was stale.
+    "Nothing drafted" is a STRONGER claim than "unpublished" and matched none of the seven
+    phrases. Turning `stage` on found five more in the same state — *False Light* (fragment
+    and README), *The Towel*, *Love Is Not a Metric Space* (fragment and README), *The
+    Kingdom That Isn't* — and no false positives. Two were READMEs, which this desk calls
+    truth.
+
 Every case has the same shape. `publish.yaml` is written by the sync tools against the
 live post; the prose is written by hand. **The manifest is the witness**, and prose that
 contradicts it is what this reports.
 
 WHAT IT CHECKS
 
+  stage        a live piece's `**Stage:**` line does not say it is published — checked only
+               where the PATH names the piece (`DASHBOARD.d/NNN-<slug>.md`,
+               `pieces/<slug>/README.md`). The only POSITIVE test here: the others look for a
+               contradiction, and a Stage line can be wrong without contradicting anything.
   unpublished  prose calls a piece unpublished; its manifest carries a reader URL.
   phantom      prose links a piece as live; its manifest carries no reader URL at all.
   unlinked     a live piece is named with no link, against the house rule — reported
@@ -88,6 +104,7 @@ SKIP_DIR_PARTS = ('/log/', '/.git/', '/node_modules/', '/__pycache__/', '/.next/
 # second one at a file that will be overwritten. The fragments are checked; the build
 # output is not, for the same reason nothing lints a build output.
 SKIP_FILES = ('corrections.md', 'DASHBOARD.md')
+FRAGDIR_NAME = 'DASHBOARD.d'      # the fragments ARE checked; only the build output is not
 
 SUPERSESSION = re.compile(
     r'retired|supersed|formerly|\bwas\b\s*[:"“]|\(was\b|replaced|previously|no longer|'
@@ -99,6 +116,29 @@ UNPUBLISHED = re.compile(
     r'\bunpublished\b|\bnot yet published\b|\bprivate draft\b|\bnot published\b|'
     r'\bunreleased\b|\bdraft only\b|\bawaiting publication\b|'
     r"\bawaiting (?:a human |Eric's )?publish\b", re.I)
+
+# THE STAGE LINE, which is a different question from the prose check below and needs a
+# different kind of answer.  `UNPUBLISHED` is a list of seven phrases, and it only ever sees a
+# CONTRADICTION: prose that says one of those words about a piece the manifest calls live.  A
+# `**Stage:**` line can be wrong without using any of them.  Measured 2026-10-11 on
+# `DASHBOARD.d/278-in-vain.md`: for twenty-four days its Stage line read *stood up 2026-09-03 …
+# Nothing drafted* while the same file, four lines further down, carried **PUBLISHED 2026-09-09**
+# and the reader URL.  Nothing was contradicted and nothing was missing — the file's own
+# append-only history was right and its HEAD was stale, which is the one shape a phrase list
+# cannot see.  "Nothing drafted" is a stronger claim than "unpublished" and matched none of them.
+#
+# So this check is POSITIVE rather than negative: where the path says which piece a Stage line is
+# about, a live piece's Stage line has to ASSERT the publication rather than merely avoid denying
+# it.  The path is what makes it safe — `DASHBOARD.d/NNN-<slug>.md` and `pieces/<slug>/README.md`
+# are the two places where a `**Stage:**` line belongs to exactly one piece, so there is no
+# guessing about the subject and no block-proximity heuristic to get wrong.
+STAGE = re.compile(r'^\*\*Stage:\*\*\s*(.*)$', re.M)
+FRAGMENT_NAME = re.compile(r'^(\d{3})-(.+)\.md$')
+# Deliberately NOT a verb: "Eric clicks Publish" is a Stage line AWAITING publication, and must
+# not read as asserting one.  `\bpublished\b` does not match it; neither does `\blive\b` match
+# "lives".  A Stage line that says "not published" asserts by this test and is then caught by
+# UNPUBLISHED, which is the check built for a contradiction — the two cover different faults.
+PUBLICATION_ASSERTED = re.compile(r'\bpublished\b|\blive\b|\bshipped\b|\bre-?synced\b', re.I)
 
 SLUG_REF = re.compile(r'`([a-z0-9][a-z0-9-]{2,})`')
 MD_LINK = re.compile(r'\[([^\]]+)\]\((https?://[^)\s]+)\)')
@@ -201,6 +241,56 @@ def markdown_files(paths):
                 yield full
 
 
+def stage_subject(path, manifests):
+    """-> the slug a `**Stage:**` line in this file is about, from the PATH, or None.
+
+    Only two shapes qualify, because only in those does the path name one piece with no
+    inference: a dashboard fragment `DASHBOARD.d/NNN-<slug>.md`, and a piece's own
+    `pieces/<slug>/README.md`.  Anywhere else a Stage line could be about anything, and a
+    checker that guesses its subject is the checker that cries about correct files.
+    """
+    norm = path.replace(os.sep, '/')
+    base = os.path.basename(norm)
+    parts = norm.split('/')
+    slug = None
+    if '/%s/' % FRAGDIR_NAME in '/' + norm:
+        m = FRAGMENT_NAME.match(base)
+        if m:
+            slug = m.group(2)
+    elif base == 'README.md' and len(parts) >= 3 and parts[-3] == 'pieces':
+        slug = parts[-2]
+    return slug if slug in manifests else None
+
+
+def head_text(text):
+    """Everything above the first dated heading — below it is history, as everywhere else here."""
+    out = []
+    for ln in text.split('\n'):
+        if LOG_HEADING.match(ln):
+            break
+        out.append(ln)
+    return '\n'.join(out)
+
+
+def stage_findings(path, text, slug, man):
+    """A live piece's Stage line must SAY SO.  -> [(line_no, kind, slug, what)]"""
+    head = head_text(text)
+    m = STAGE.search(head)
+    if not m:
+        return []                      # no Stage line is not a claim; nothing to check
+    line_no = head[:m.start()].count('\n') + 1
+    stage = m.group(1)
+    if SUPERSESSION.search(stage):
+        return []
+    urls = [u for u in man['urls'].values() if u]
+    if PUBLICATION_ASSERTED.search(stage) or any(u in stage for u in urls):
+        return []
+    where = ', '.join(f"{o}={u}" for o, u in man['urls'].items() if u) or \
+            ', '.join(man['urls'])
+    return [(line_no, 'stage', slug,
+             f"the Stage line does not say this piece is published; manifest has {where}")]
+
+
 def blocks(text):
     """(line_no, block) per bullet or paragraph.
 
@@ -254,6 +344,11 @@ def check(paths, pieces_dir, outlets_file, prefer):
         except (OSError, UnicodeDecodeError):
             continue
         rule_here = bool(RULE_STATED.search(text))
+
+        subject = stage_subject(path, manifests)
+        if subject and manifests[subject]['urls']:
+            for found in stage_findings(path, text, subject, manifests[subject]):
+                findings.append((path, *found))
 
         for line_no, block in blocks(text):
             if SUPERSESSION.search(block):

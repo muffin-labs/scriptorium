@@ -4396,6 +4396,59 @@ def unit_prose(tmp):
     check("check_refs: `slug` as link text is a path, not a title claim",
           'draft-one' not in by, str(by.get('draft-one')))
 
+    # THE STAGE LINE, 2026-10-11.  `unpublished` only ever sees a CONTRADICTION, so a Stage line
+    # can be wrong without using one of its seven phrases.  On the real desk
+    # DASHBOARD.d/278-in-vain.md read "stood up ... Nothing drafted" for twenty-four days while
+    # the SAME FILE, four lines down, carried PUBLISHED and the reader URL.  The first case below
+    # is exactly that shape, and it is the one that matters: the fault is in the HEAD of the file,
+    # so a check that reads the whole fragment passes it.  Turning this on found five more pieces
+    # in the same state, zero false positives.
+    w('DASHBOARD.d/010-live-one.md',
+      "## live-one\n**Stage:** **stood up 2026-09-01 — outline down. Nothing drafted.**\n\n"
+      "**PUBLISHED 2026-09-09** · live at https://pub.test/p/live-one · the history is right\n")
+    w('DASHBOARD.d/020-draft-one.md',
+      "## draft-one\n**Stage:** **stood up 2026-09-01. Nothing drafted.**\n")
+    w('DASHBOARD.d/030-retitled.md',
+      "## retitled\n**Stage:** **PUBLISHED 2026-09-03** — live and verified.\n")
+    w('DASHBOARD.d/050-live-one.md',
+      "## live-one\n**Stage:** composed and shipped to https://pub.test/p/live-one on 09-09.\n")
+    w('DASHBOARD.d/060-live-one.md',
+      "## live-one\n**Stage:** **Eric clicks Publish.** Then record `public_url`.\n")
+    w('DASHBOARD.d/070-live-one.md',
+      "## live-one\n**Stage:** **stood up.** ~~was: nothing drafted~~ superseded below.\n")
+    w('not-a-fragment/010-live-one.md',
+      "## live-one\n**Stage:** **stood up 2026-09-01. Nothing drafted.**\n")
+
+    g = cs.check([os.path.join(root, 'DASHBOARD.d'), os.path.join(root, 'not-a-fragment')],
+                 os.path.join(root, 'pieces'),
+                 os.path.join(root, 'publishing', 'outlets.yaml'), None) or []
+    st = {os.path.basename(p_): ln for p_, ln, k, _s, _w in g if k == 'stage'}
+    check("check_status: a live piece's Stage line that does not say so is reported, though the "
+          "same file carries PUBLISHED lower down (In Vain, stale 24 days)",
+          st.get('010-live-one.md') == 2, str(g))
+    check("check_status: a piece with no reader URL is not asked to claim one",
+          '020-draft-one.md' not in st, str(st))
+    check("check_status: a Stage line that says PUBLISHED satisfies it",
+          '030-retitled.md' not in st, str(st))
+    check("check_status: a Stage line carrying the reader URL satisfies it without the word",
+          '050-live-one.md' not in st, str(st))
+    check("check_status: 'Eric clicks Publish' is awaiting publication, not asserting one",
+          st.get('060-live-one.md') == 2, str(st))
+    check("check_status: a Stage line marking its own supersession is exempt, as everywhere else",
+          '070-live-one.md' not in st, str(st))
+    check("check_status: a Stage line is only checked where the PATH names the piece — "
+          "DASHBOARD.d/NNN-<slug>.md or pieces/<slug>/README.md, nowhere else",
+          len([1 for p_, _l, k, _s, _w in g if k == 'stage' and 'not-a-fragment' in p_]) == 0,
+          str(g))
+
+    # And the piece README, which this desk calls truth: two of the five found on 2026-10-11 were
+    # READMEs describing a published piece as drafting.
+    w('pieces/live-one/README.md', "# Live One\n\n**Stage:** drafting — v1 written.\n")
+    r = cs.check([os.path.join(root, 'pieces')], os.path.join(root, 'pieces'),
+                 os.path.join(root, 'publishing', 'outlets.yaml'), None) or []
+    check("check_status: a live piece's README Stage line that calls it drafting is reported",
+          any(k == 'stage' and s_ == 'live-one' for _p, _l, k, s_, _w in r), str(r))
+
     import publications as pb
     pubs = {'bg': {'outlets': ['sub', 'site'], 'required_outlets': ['sub', 'site']}}
     live = {'publication': 'bg', 'public_url': 'https://pub.test/p/a'}
