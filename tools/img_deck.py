@@ -40,8 +40,14 @@ WHY THIS EXISTS
 
   USAGE   python3 tools/img_deck.py <talk-dir> <out-dir> --runtime <deck-stage.js>
                   [--check] [--width N] [--quality N] [--keep-png]
+          python3 tools/img_deck.py <talk-dir> --md <file.md>
 
           --check  verify and report, write nothing. Use it before a publish.
+          --md     write a READING COPY instead of a deck: one markdown file, every
+                   slide's picture with the words spoken over it underneath. It is for
+                   the speaker, who needs to read the talk straight through on a page —
+                   the deck shows one slide at a time and the draft is wrapped in the
+                   slide dialect. Regenerated, never hand-edited: the draft is the source.
           --width    longest edge of the SERVED image (default 1600; 0 keeps the original)
           --quality  JPEG quality of the served image (default 82)
           --keep-png copy the masters through untouched instead
@@ -415,13 +421,44 @@ def build(talk_dir, out_dir, runtime, check=False, width=1600, quality=82):
             'bytes': total}
 
 
+def write_markdown(talk_dir, slides, man, out):
+    slug = os.path.basename(os.path.normpath(talk_dir))
+    words = sum(len(' '.join(s['notes']).split()) for s in slides)
+    wpm = 115
+    L = [f"# {man.get('title', slug)}", '']
+    if man.get('subtitle'):
+        L += [f"*{man['subtitle']}*", '']
+    L += [f"**{len(slides)} slides · {words} spoken words · about "
+          f"{words / wpm:.0f} minutes at {wpm} words a minute**, before the pictures are read "
+          f"aloud." if words else '', '']
+    L += ['*A reading copy, generated from `draft.md`. Every picture is the slide; the words '
+          'under it are what is said while it is up. Edit the draft, never this file.*', '', '---', '']
+    seen_mv = None
+    for i, s in enumerate(slides, 1):
+        if s['movement'] and s['movement'] != seen_mv:
+            seen_mv = s['movement']
+            L += [f"## {s['movement']}", '']
+        label = f" — {s['label']}" if s['label'] and s['label'] != s['movement'] else ''
+        L += [f"**{i}.** `{os.path.basename(s['img'])}`{label}", '']
+        L += [f"![{' '.join(s['alt'].split())}]({s['img']})", '']
+        for para in s['notes']:
+            L += [para, '']
+        L += ['---', '']
+    with open(out, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(L).rstrip() + '\n')
+    print(f'wrote {out}: {len(slides)} slides, {words} spoken words')
+    return {'slides': len(slides), 'words': words}
+
+
 def main():
-    args, runtime, check = [], None, False
+    args, runtime, check, md = [], None, False, None
     width, quality = 1600, 82
     it = iter(sys.argv[1:])
     for a in it:
         if a == '--runtime':
             runtime = next(it, None)
+        elif a == '--md':
+            md = next(it, None)
         elif a == '--check':
             check = True
         elif a == '--keep-png':
@@ -434,6 +471,22 @@ def main():
             die(1, f'unknown option {a}')
         else:
             args.append(a)
+    if md:
+        if len(args) != 1:
+            die(1, 'usage: img_deck.py <talk-dir> --md <file.md>')
+        talk_dir = args[0]
+        draft = os.path.join(talk_dir, 'draft.md')
+        if not os.path.exists(draft):
+            die(1, f'{os.path.basename(talk_dir)}: no draft.md')
+        slides = parse(open(draft, encoding='utf-8').read())
+        faults = verify(talk_dir, slides)
+        for f in faults:
+            print(f'FAULT  {f}', file=sys.stderr)
+        if faults:
+            die(2, f'{len(faults)} fault(s) — nothing written')
+        write_markdown(talk_dir, slides,
+                       read_manifest(os.path.join(talk_dir, 'talk.yaml')), md)
+        return
     if check and len(args) == 1:
         args.append('')
     if len(args) != 2:
