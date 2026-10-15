@@ -21,6 +21,17 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **`voice_privacy` stops reading a style's own checker as the author's prose.** A voice may ship
+  MECHANISM beside its constitution — `styles/<name>/check.py`, the mechanical half of a critique
+  — and mechanism is not voice: it is usually ported FROM the framework, so it shares whole lines
+  with the tools by construction. The scan walked every text file in a voice directory, `.py`
+  included, and so reported 97 runs of one voice "leaking" into `img_deck.py`, `md_to_marp.py`
+  and `md_to_substack.py` — every one of them code the instance had copied OUT of the framework,
+  read backwards as prose going in. The framework side is still scanned whole; the voice side now
+  contributes runs from `.md`, `.yaml`, `.yml` and `.txt` only, which is what the docstring always
+  said it scanned. A check that cries leak at its own source code gets switched off, and that is
+  how a privacy gate actually fails. PATCH.
+
 - **A second path to a published deck, for a talk whose every slide is a picture.**
   `tools/img_deck.py`. The existing path — draft → `md_to_dc.py` → a Claude Design canvas →
   `dc_to_deck.py` → `talk_bundle.py` — exists because a typographic deck needs a design pass.

@@ -42,6 +42,17 @@ import sys, os, re, json, hashlib, argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMEWORK = os.path.dirname(HERE)
 TEXT = ('.md', '.py', '.yaml', '.yml', '.js', '.txt', '.html', '.json', '.sh')
+# What a VOICE contributes runs FROM. The framework side is scanned whole — a leak can land in
+# any file there — but on the voice side only the author's own writing is private: the
+# constitution, the knobs, the corrections, the exemplar notes. A style may also ship MECHANISM
+# beside those (`styles/<name>/check.py`, the mechanical half of a critique), and mechanism is
+# not voice: it is usually PORTED FROM THE FRAMEWORK, so it shares whole lines with the tools by
+# construction. Scanning it reported 97 runs of `recess-talk` "leaking" into img_deck.py,
+# md_to_marp.py and md_to_substack.py on 2026-10-15 — every one of them code the instance had
+# copied OUT of the framework, read backwards as the author's prose going in. A check that
+# cries leak at its own source code gets switched off, which is how a privacy gate actually
+# fails. The docstring above always said these four; now the code agrees with it.
+VOICE_TEXT = ('.md', '.yaml', '.yml', '.txt')
 WORD = re.compile(r"[a-z0-9]+(?:['’][a-z]+)?")
 BASELINE = '.privacy-baseline.json'
 
@@ -58,11 +69,11 @@ def sha(run):
     return hashlib.sha1(run.encode('utf-8')).hexdigest()
 
 
-def files_under(d):
+def files_under(d, exts=TEXT):
     for root, dirs, names in os.walk(d):
         dirs[:] = [x for x in dirs if x not in ('.git', 'node_modules', '__pycache__')]
         for nm in names:
-            if nm.endswith(TEXT) and not nm.startswith('.'):
+            if nm.endswith(exts) and not nm.startswith('.'):
                 yield os.path.join(root, nm)
 
 
@@ -102,10 +113,10 @@ def hits(instance, n=12):
             inherited |= runs(words(t.replace('<name>', v)), n)
         seed = seeded_from(instance, v)
         if seed and os.path.isdir(os.path.join(fw_styles, seed)):
-            for p in files_under(os.path.join(fw_styles, seed)):
+            for p in files_under(os.path.join(fw_styles, seed), VOICE_TEXT):
                 inherited |= runs(words(read(p)), n)
         mine = set()
-        for p in files_under(os.path.join(instance, 'styles', v)):
+        for p in files_under(os.path.join(instance, 'styles', v), VOICE_TEXT):
             mine |= runs(words(read(p)), n)
         mine -= inherited
         for rel, rs in fw.items():
