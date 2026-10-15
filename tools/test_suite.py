@@ -4187,6 +4187,67 @@ def unit_linkedin_canonical_once(tmp):
 
 
 # ---------------------------------------------------------------- unit: linkedin outlet
+def unit_publication_path(tmp):
+    """The faults found publishing the-top-step to three outlets (2026-10-15), one check each."""
+    print("\n-- publication path: the faults of 2026-10-15 -------------------------")
+    import subprocess as _sp
+    import check_captions as cc
+    import piece_header as ph
+    import web_images as wi
+    d = os.path.join(tmp, 'pubpath')
+    os.makedirs(os.path.join(d, 'assets'), exist_ok=True)
+    with open(os.path.join(d, 'assets', 'fig.png'), 'wb') as f:
+        f.write(_tiny_png())
+    with open(os.path.join(d, 'draft.md'), 'w', encoding='utf-8') as f:
+        f.write('*Draft — scaffold*\n\n---\n\n![A chart](assets/fig.png)\n\nBody.\n')
+    man = os.path.join(d, 'publish.yaml')
+    # 1. a comment on the `captions:` key line is still the key
+    with open(man, 'w', encoding='utf-8') as f:
+        f.write('title: T\nsubtitle: S\ncaptions:   # settled 2026-10-15\n  assets/fig.png: "A caption: with a colon."\n')
+    caps = cc._manifest(d)[2]
+    check('check_captions reads a captions: block whose key line carries a comment',
+          caps.get('assets/fig.png') == 'A caption: with a colon.', str(caps))
+    # 2. a bare-date publish_at is MALFORMED (exit 5) — not EMBARGOED — and lint catches it
+    with open(man, 'a', encoding='utf-8') as f:
+        f.write('publish_at: 2026-10-15\n')
+    sched = os.path.join(HERE, 'schedule.py')
+    r = _sp.run([sys.executable, sched, 'lint', d], capture_output=True, text=True)
+    check('schedule lint refuses a publish_at with no zone (exit 5)',
+          r.returncode == 5 and 'MALFORMED' in r.stdout, r.stdout + r.stderr)
+    r = _sp.run([sys.executable, sched, 'check', d], capture_output=True, text=True)
+    check('schedule check says MALFORMED, not EMBARGOED, for a bare date',
+          r.returncode == 5 and 'EMBARGOED' not in r.stdout, r.stdout)
+    # 3. piece_header writes the H1 from title: when the scaffold has none
+    new, note = ph.rewrite(open(os.path.join(d, 'draft.md'), encoding='utf-8').read(),
+                           {'title': 'T', 'published_at': '2026-10-15',
+                            'canonical': 'https://example.com/t'})
+    check('piece_header writes an H1 from title: rather than leaving a live file "Draft"',
+          bool(new) and new.startswith('# T\n') and '*Published 2026-10-15' in new, note)
+    # 4. web copies are JPEG and batches respect the carry limit
+    uri = wi.data_uri(os.path.join(d, 'assets', 'fig.png'))
+    check('web_images serves a JPEG copy', uri.startswith('data:image/jpeg;base64,'), uri[:30])
+    items = [{'x': 'a' * 400} for _ in range(10)]
+    groups = wi.batches(items, limit=1000)
+    check('web_images batches stay under the limit and drop nothing',
+          sum(len(g) for g in groups) == 10 and all(len(json.dumps(g)) <= 1000 + 450 for g in groups),
+          str([len(g) for g in groups]))
+    # 5. resync and check_outlets see a talk, and refuse a text with no manifest
+    t = os.path.join(tmp, 'talks', 'tk')
+    os.makedirs(t, exist_ok=True)
+    open(os.path.join(t, 'draft.md'), 'w').write('x\n')
+    r = _sp.run([sys.executable, os.path.join(HERE, 'resync.py'), t], capture_output=True, text=True)
+    check('resync refuses a text with no publish.yaml or talk.yaml (non-zero, never 0)',
+          r.returncode not in (0,) and 'talk.yaml' in (r.stdout + r.stderr), r.stdout + r.stderr)
+    r = _sp.run([sys.executable, os.path.join(HERE, 'check_outlets.py'), t], capture_output=True, text=True)
+    check('check_outlets refuses a text with no manifest (no traceback)',
+          r.returncode == 4 and 'Traceback' not in r.stderr, r.stdout + r.stderr)
+    open(os.path.join(t, 'talk.yaml'), 'w').write('title: Tk\noutlets: []\n')
+    r = _sp.run([sys.executable, os.path.join(HERE, 'check_outlets.py'), t], capture_output=True, text=True)
+    check('check_outlets reads a talk.yaml (refuses on its empty outlets, not on a missing file)',
+          r.returncode == 4 and 'declares no' in r.stdout and 'Traceback' not in r.stderr,
+          r.stdout + r.stderr)
+
+
 def unit_captions(tmp):
     """Captions live in publish.yaml and reach every outlet from there (2026-09-11)."""
     print("\n-- captions: publish.yaml -> every outlet ----------------------------")
@@ -4958,9 +5019,15 @@ def unit_linkedin(tmp):
         # image must carry the alt with it, whole.
         fp = os.path.join(out, 'fig1.json')
         f1 = json.load(open(fp, encoding='utf-8')) if os.path.exists(fp) else {}
+        # The bytes are the SERVED copy (web_images: JPEG), not the master PNG — a master is
+        # ~4.5 MB of base64 per figure, one carry each (the-top-step, 2026-10-15).
         check('each figure gets a carry payload with its bytes and its alt together',
-              f1.get('alt') == quoted_alt and str(f1.get('dataUri', '')).startswith('data:image/png;base64,'),
+              f1.get('alt') == quoted_alt and str(f1.get('dataUri', '')).startswith('data:image/jpeg;base64,'),
               str({k: (v[:40] if isinstance(v, str) else v) for k, v in f1.items()}))
+        bp = os.path.join(out, 'figures1.json')
+        b1 = json.load(open(bp, encoding='utf-8')) if os.path.exists(bp) else {}
+        check('the figures are also batched for carrying, the same payload inside',
+              (b1.get('figures') or [{}])[0] == f1, bp)
 
     # --- the refusals ---------------------------------------------------------------
     def refuses(mutate, why_fragment, label):
@@ -6386,6 +6453,7 @@ def main():
         unit_linkedin_post(tmp)
         unit_scratch(tmp)
         unit_captions(tmp)
+        unit_publication_path(tmp)
         unit_prose(tmp)
         unit_substack_account(tmp)
         unit_account_guard(tmp)

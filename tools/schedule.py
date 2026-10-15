@@ -11,7 +11,8 @@ moment, and a refusal before it.
 
 Read it with `state()`, or from the command line:
 
-  python3 tools/schedule.py check <piece>...     exit 4 while a piece is embargoed
+  python3 tools/schedule.py check <piece>...     exit 4 while a piece is embargoed, 5 if malformed
+  python3 tools/schedule.py lint <piece>...      exit 5 only on a malformed field (a gate)
   python3 tools/schedule.py list                 every piece that carries the field
   python3 tools/schedule.py due [--within 48h]   what opens inside the window (or has)
   python3 tools/schedule.py set <piece> "<moment>"
@@ -383,9 +384,19 @@ def _registry_outlets():
 
 
 def cmd_check(args):
-    bad = 0
+    bad = malformed = 0
     for ref in args.pieces:
         pdir = resolve(ref)
+        # A field that cannot be read is not an embargo, and must not wear its face. It used
+        # to print EMBARGOED and exit 4 — the same answer as a legitimately future moment —
+        # so a bare date written weeks earlier was discovered on the morning it was due
+        # (the-top-step, 2026-10-15). It still refuses (exit 5); it just says why.
+        try:
+            state(pdir)
+        except Malformed as e:
+            print(f'MALFORMED  {os.path.basename(pdir)}: {e}')
+            malformed += 1
+            continue
         refusal = refuse_if_embargoed(pdir)
         if refusal:
             print(f'EMBARGOED  {refusal}')
@@ -395,7 +406,24 @@ def cmd_check(args):
             print(f'open       {os.path.basename(pdir)}'
                   + (f' — opened {fmt(moment)} ({human_delta(moment)})' if moment else
                      f' — no {FIELD}'))
-    return 4 if bad else 0
+    return 5 if malformed else (4 if bad else 0)
+
+
+def cmd_lint(args):
+    """Fail ONLY on a field that cannot be read. An embargo is a normal state for a draft,
+    so `check` cannot be a gate before publication; this can, and gates.py runs it, so a bare
+    date is caught at review rather than on the day the piece is due."""
+    bad = 0
+    for ref in args.pieces:
+        pdir = resolve(ref)
+        try:
+            st, moment = state(pdir)
+            print(f'ok         {os.path.basename(pdir)} — '
+                  + (f'{FIELD} {fmt(moment)}' if moment else f'no {FIELD}'))
+        except Malformed as e:
+            print(f'MALFORMED  {os.path.basename(pdir)}: {e}')
+            bad += 1
+    return 5 if bad else 0
 
 
 def cmd_list(args):
@@ -843,6 +871,10 @@ def main():
     c = sub.add_parser('check', help='exit 4 while any named piece is embargoed')
     c.add_argument('pieces', nargs='+')
     c.set_defaults(fn=cmd_check)
+
+    c = sub.add_parser('lint', help='exit 5 if a named piece carries an unreadable field')
+    c.add_argument('pieces', nargs='+')
+    c.set_defaults(fn=cmd_lint)
 
     c = sub.add_parser('list', help='every piece carrying the field')
     c.set_defaults(fn=cmd_list)

@@ -45,6 +45,12 @@ glitchy char-by-char editor typing with one paste + one footnote pass.
   body under the in-text cross-link convention. Record both when a piece goes live: a piece that
   carried only the editor URL left a sibling essay with no correct link to reach for. Take the
   slug from the publication's archive rather than guessing it from the title.
+  **`public_url` is a KEY NAME, and it belongs to one outlet.** Each outlet in `outlets.yaml` names
+  its own `manifest_url_key` — on a desk with two publications, `public_url` is the first
+  Substack's and the second's is e.g. `substack_url`, the blog's `blog_url`, LinkedIn's
+  `linkedin_url`. **Record each outlet's reader URL under that outlet's key, and only there.**
+  Writing `public_url` on a piece whose outlets do not use it makes `outlet_audit` report an
+  outlet the piece never declared (measured 2026-10-15, the-top-step).
 - **In auto mode, the pane's snippet path needs its standing rule in force:**
   `python3 framework/tools/automode.py check` (exit 0). Exit 3 means missing or stale: run
   `automode.py install` on the author's yes. It writes their user settings, the only scope the
@@ -280,6 +286,21 @@ first.
    keeps the snippet small — *For the Love of Dogs* converts to 9.7 KB this way instead of
    ~14 MB. A piece with no recorded URL still inlines, which is what performs the first upload.
    Delete a URL to force a fresh upload from the local file.
+
+   **More than two or three images: upload them FIRST, then compose.** Inlining is fine for a
+   hero; it is not for a piece that is mostly pictures. The-top-step's twenty PNGs (2026-10-15)
+   made a ~65 MB snippet that no carry can reach a page with — `window.name` is measured to ~4 MB.
+   `md_to_substack` now warns when its output is too large to carry. The path:
+
+       python3 framework/tools/substack_images.py pieces/<name> --out <dir>     # upload<k>.js
+       #   carry each with pane_carry.py, run it on /publish/home (NOT in an editor), save
+       #   what it returns as <dir>/upload<k>.result.json
+       python3 framework/tools/substack_images.py pieces/<name> --record <dir>  # writes images:
+
+   It uploads the served copy (1600 px JPEG q82, `web_images.py`) through Substack's own
+   `POST /api/v1/image`, each batch behind the account guard, and refuses to record a batch that
+   was refused, failed, or names an image `draft.md` does not use. After that the compose snippet
+   references the URLs: 30 KB for the same twenty-figure piece.
 
    **An image added in the Substack composer exists only on Substack**, and `draft.md` will
    not know about it, so a recompose would silently drop it. Pull it back down with
@@ -890,6 +911,20 @@ satisfy the Clipboard API, so on real Chrome the click has to be a real one.
    it is the one notification the piece will ever get. Say so plainly before clicking, so nobody
    learns it from the send. *(Shipping a later **edit** to an already-published post is a different
    act with a different rule — see Republish step 5; that path sends nothing.)*
+
+   **The click may open a SECOND dialog: "Add subscribe buttons to your post"**, with *Add
+   subscribe buttons* and *Publish without buttons* (measured 2026-10-15, MuffinLabs; it is
+   Substack's, not the desk's, and it may appear on any publication). **Choose *Publish without
+   buttons*.** The other inserts blocks the draft does not hold, so the post stops matching the
+   digest you just proved, and every later `substack_verify` reports drift the author never wrote.
+   A script that clicks *Send* and then waits for the URL to change will time out on this dialog
+   (the editor is still open, the post still unpublished) — so after the click, read
+   `GET /api/v1/drafts/<id>`'s `is_published` rather than the URL, and screenshot if it is false.
+   If the author wants subscribe buttons, they go in `draft.md` first, like any other block.
+
+   **Navigate to `/publish/home`, not `/publish/posts`,** for every non-editor step here. In
+   Claude in Chrome on 2026-10-15 a signed-in session sent to `/publish/posts` bounced to the
+   sign-in page ("This page is private") while `/publish/home` in the same browser was signed in.
 
 8. **Set the cover. This is a STEP, not an option, and it runs AFTER the publish click.**
    A post with no `cover_image` has no drafts-list thumbnail, no archive card and no social

@@ -308,18 +308,28 @@ def main():
     # One carry payload per figure. The bytes and the alt text travel together, so the
     # page that pastes the image is also the page that restores its alt — which the paste
     # drops — and neither is ever retyped.
-    import base64, mimetypes
+    #
+    # The bytes are the SERVED copy (web_images: 1600 px JPEG q82), not the master. A master PNG
+    # is ~4.5 MB of base64, one carry per figure; the-top-step's nineteen (2026-10-15) were
+    # inserted from hand-built JPEG batches instead. LinkedIn re-encodes whatever it is given.
+    # And they are BATCHED: figures<k>.json holds as many as fit one carry, so a figure-heavy
+    # piece is a handful of carries rather than one per figure.
+    import web_images
+    payloads = []
     for img in images:
-        mime = mimetypes.guess_type(img['file'])[0] or 'image/png'
-        with open(img['file'], 'rb') as fh:
-            data = base64.b64encode(fh.read()).decode()
+        p = {'n': img['n'], 'alt': img['alt'], 'caption': img.get('caption', ''),
+             'name': os.path.basename(img['file']), 'dataUri': web_images.data_uri(img['file'])}
+        payloads.append(p)
         with open(os.path.join(out, f"fig{img['n']}.json"), 'w', encoding='utf-8') as fh:
-            json.dump({'n': img['n'], 'alt': img['alt'], 'caption': img.get('caption', ''),
-                       'name': os.path.basename(img['file']),
-                       'dataUri': f'data:{mime};base64,{data}'}, fh, ensure_ascii=False)
+            json.dump(p, fh, ensure_ascii=False)
+    groups = web_images.batches(payloads)
+    for k, g in enumerate(groups, 1):
+        with open(os.path.join(out, f"figures{k}.json"), 'w', encoding='utf-8') as fh:
+            json.dump({'figures': g}, fh, ensure_ascii=False)
     print(f"\nwrote      {out}/article.html, article.json"
           + (", cover.json" if cover_img else "")
-          + (f", fig1..{len(images)}.json" if images else " (no body figures)"))
+          + (f", fig1..{len(images)}.json, figures1..{len(groups)}.json (carry batches)"
+             if images else " (no body figures)"))
     print("next       compose in LinkedIn's Article editor; a human clicks Publish")
     return 0
 

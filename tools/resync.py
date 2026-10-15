@@ -162,6 +162,23 @@ def check_outlet(oa, piece_dir, manifest, piece_name, oname, ocfg, deferrals, sh
                        f"(body only — footnotes/marks not compared here)", url)
 
 
+def check_talk_outlet(oa, manifest, oname, ocfg):
+    """A talk's page is a deck of pictures, so there is no paragraph text to compare against the
+    draft. What CAN be said is that the recorded page answers; the word is PRESENT, never CURRENT,
+    so nobody reads it as a content check. The deck is verified where it is built (img_deck.py
+    --check, and the served deck.html against the local build)."""
+    url = manifest.get('public_url') or manifest.get(ocfg.get('manifest_url_key', '')) or ''
+    if not url:
+        return ('NO ADDRESS', 'talk.yaml records no public_url', None)
+    status, _page, final = oa.fetch(url)
+    if status is None:
+        return ('UNREACHABLE', 'request failed', url)
+    if status != 200 or oa.landed_on_not_found(final, ocfg):
+        return ('MISSING', f'HTTP {status}', url)
+    return ('PRESENT', 'HTTP 200 — a talk: the deck is not compared here (img_deck --check, and the '
+                       'served deck.html against the local build)', url)
+
+
 def main():
     ap = argparse.ArgumentParser(description="every outlet a piece declares, or it is not shipped")
     ap.add_argument('piece')
@@ -174,9 +191,14 @@ def main():
     if not os.path.isdir(piece_dir):
         die(1, f"no such piece: {piece_dir}")
     piece_name = os.path.basename(piece_dir)
-    mpath = os.path.join(piece_dir, 'publish.yaml')
-    if not os.path.exists(mpath):
-        die(1, f"{piece_name} has no publish.yaml")
+    # A talk's manifest is talk.yaml (talks/<slug>/). Reading publish.yaml only, this tool could
+    # not see a talk at all (backlog: the-outlet-gates-cannot-see-a-talk, 2026-10-15).
+    mpath = next((os.path.join(piece_dir, n) for n in ('publish.yaml', 'talk.yaml')
+                  if os.path.exists(os.path.join(piece_dir, n))), None)
+    if mpath is None:
+        die(2, f"{piece_name} has no publish.yaml or talk.yaml — nothing to compare, and that is "
+               f"not a pass")
+    is_talk = os.path.basename(mpath) == 'talk.yaml'
     manifest = yaml.safe_load(open(mpath)) or {}
     cfg = yaml.safe_load(open(a.config)) or {}
     outlets, legacy = cfg.get('outlets', {}), cfg.get('legacy_outlet')
@@ -208,7 +230,10 @@ def main():
         ocfg = outlets.get(oname)
         if ocfg is None:
             rows.append((oname, 'UNKNOWN', f"not in {a.config}", None)); worst = max(worst, 3); continue
-        state, note, url = check_outlet(oa, piece_dir, manifest, piece_name, oname, ocfg, deferrals, sha)
+        if is_talk:
+            state, note, url = check_talk_outlet(oa, manifest, oname, ocfg)
+        else:
+            state, note, url = check_outlet(oa, piece_dir, manifest, piece_name, oname, ocfg, deferrals, sha)
         rows.append((oname, state, note, url))
         if state in ('BEHIND', 'MISSING', 'NO ADDRESS', 'UNKNOWN'):
             worst = max(worst, 3)
@@ -221,12 +246,15 @@ def main():
         if url:
             print(f"  {'':<{width}}  {url}")
 
-    current = sum(1 for r in rows if r[1] in ('CURRENT', 'DEFERRED'))
+    current = sum(1 for r in rows if r[1] in ('CURRENT', 'DEFERRED', 'PRESENT'))
     print()
     print(f"{current} of {len(rows)} outlet(s) current"
           + ("" if current == len(rows) else " — THIS PIECE IS NOT SHIPPED"))
     if worst == 0:
-        print("every outlet this piece declares carries the current draft.")
+        if any(r[1] == 'PRESENT' for r in rows):
+            print("every outlet answers 200; a talk's deck content is not compared by this tool.")
+        else:
+            print("every outlet this piece declares carries the current draft.")
     sys.exit(worst)
 
 

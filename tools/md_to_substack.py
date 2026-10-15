@@ -1074,6 +1074,15 @@ def main():
                   "with --allow-unverified if these are genuinely not verify-markers.")
             sys.exit(3)
     open(out_js, 'w').write(js)
+    # A snippet carrying the images themselves cannot be carried past a few MB (window.name,
+    # measured to ~4 MB). The-top-step's twenty inlined PNGs made ~65 MB (2026-10-15). Say so
+    # here rather than at the carry, and name the tool that removes the bytes from the snippet.
+    _inlined = js.count('data:image/')
+    if len(js) > 3_500_000:
+        print(f"WARNING: {out_js} is {len(js):,} bytes with {_inlined} inlined image(s) — too large "
+              f"to carry. Upload the images first and record their URLs:\n"
+              f"  python3 framework/tools/substack_images.py {piece_dir} --out <dir>\n"
+              f"then convert again; the snippet then references the URLs instead of the bytes.")
     print(f"wrote {out_js} ({len(js)} bytes)")
 
 JS_TEMPLATE = """(() => {

@@ -87,7 +87,7 @@ def image_map(piece_dir):
     if not os.path.exists(path):
         return out
     for line in open(path, encoding='utf-8'):
-        if re.match(r'^images:\s*$', line):
+        if re.match(r'^images:\s*(#.*)?$', line):
             inblock = True; continue
         if inblock:
             m = re.match(r'\s+(\S+)\s*:\s*(https?://\S+)', line)

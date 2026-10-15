@@ -21,6 +21,34 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **The publication path, fixed where a three-outlet publish broke it (2026-10-15).** Publishing
+  a twenty-figure piece to a site, LinkedIn and Substack in one sitting found ten faults; these
+  are the framework's share.
+  - **`substack_images.py` (new)** uploads a piece's images to Substack before composing, in
+    carry-sized batches behind the account guard, and records the URLs under `images:` — so the
+    compose snippet references them. Twenty inlined PNGs had made a ~65 MB snippet nothing could
+    carry; afterwards it is 30 KB. `md_to_substack` warns when its output is too large to carry.
+  - **`web_images.py` (new):** the served copy (1600 px JPEG q82, img_deck's recipe) and
+    carry-sized batches. `md_to_linkedin` now writes figure payloads from it and also
+    `figures<k>.json` batches: 66 MB in 19 carries became 15 MB in 3.
+  - **`schedule.py`:** a malformed `publish_at` reports MALFORMED (exit 5) instead of wearing an
+    embargo's face, and `schedule.py lint` fails only on that — run by `gates.py`, so a bare date
+    is caught at review rather than on the morning it is due.
+  - **`gates.py`** runs `schedule_lint` (fatal) and `check_captions` (a warning; still a stop at
+    publish), so an uncaptioned figure is news at review.
+  - **`check_captions` / `review_artifact`:** a comment on the `captions:` / `images:` key line no
+    longer hides the block (19 false misses).
+  - **`piece_header.py`** writes the H1 from `title:` when the scaffold has none, instead of
+    leaving a published file saying "Draft".
+  - **`resync.py` / `check_outlets.py`** read a talk's `talk.yaml`; a text with no manifest exits
+    non-zero (resync 2, check_outlets 4) rather than a traceback. A talk outlet reports PRESENT,
+    never CURRENT: its deck is not content-compared here.
+  - **`substack_account route`:** when no connected browser carries the outlet's name (the
+    extension may number them), the account check decides, never the label.
+  - **Skills:** `publish` — each outlet's URL under its own `manifest_url_key`; the image upload
+    step; Substack's *Add subscribe buttons* dialog (*Publish without buttons*); `/publish/home`
+    over `/publish/posts`. `linkedin-article` — figures by batch; the pane's cover route.
+
 - **`picture-deck`: a talk built one picture at a time from its reading copy.** The method *The
   Top Step* was built by on 2026-10-14/15 (27 slides), written down. The desk writes a spec per
   picture in `assets/SPECS.md`. The author generates each image and sends it with a position

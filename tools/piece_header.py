@@ -106,7 +106,12 @@ def rewrite(src, man, outlets=None):
     head = [p for p in paras if p.lstrip().startswith('#')]
     body = [p for p in paras if not p.lstrip().startswith('#')]
     if not head:
-        return None, 'no H1 in the front matter — left alone'
+        # A scaffold note with no H1 is still a draft's header, and the manifest knows the
+        # title. Refusing here left a live piece's file saying "Draft" (the-top-step,
+        # 2026-10-15, published to three outlets); write the H1 from `title:` instead.
+        if not man.get('title'):
+            return None, 'no H1 in the front matter and no `title:` to write one from — left alone'
+        head = ['# ' + str(man['title']).strip()]
 
     # Drop any banner we wrote before, so running twice is a no-op rather than a stack.
     body = [p for p in body if not BANNER_RE.match(p.strip())]

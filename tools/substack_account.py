@@ -156,7 +156,14 @@ def browser_steps(chrome_browser):
     n = repr(chrome_browser)
     return [f"list_connected_browsers — find the browser named exactly {n}",
             f"select_browser {n} (ask the author before driving it) — never pick one by guessing from the list",
-            f"not listed? switch_browser, and at the Connect prompt name it exactly {n}, as outlets.yaml does"]
+            f"not listed? switch_browser, and at the Connect prompt name it exactly {n}, as outlets.yaml does",
+            # Measured 2026-10-15: the extension listed "Browser 1" and "Browser 2" — names nothing
+            # on the desk sets — and the outlet's browser was found only by its sign-in. The name is
+            # a convenience; the ACCOUNT is the proof, and `check` already refuses the wrong one.
+            "no browser carries that name (the extension may number them)? then the account decides, "
+            "not the label: on each connected browser in turn, open the outlet's /publish/home and run "
+            "the snippet below; the one `check` passes (exit 0) is the one. Never write to a browser "
+            "`check` has not passed, and if none passes, the author signs in — never you"]
 
 
 def is_substack(spec):

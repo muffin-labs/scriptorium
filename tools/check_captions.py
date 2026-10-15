@@ -60,10 +60,13 @@ def _manifest(piece_dir):
         return cover, cover_caption, captions, url_to_local
     inblock = imgblock = False
     for line in open(path, encoding='utf-8'):
-        if re.match(r'^captions:\s*$', line):
+        # A trailing comment on the key line is still the key (`captions:   # settled …`).
+        # Matching `^captions:\s*$` alone read such a block as absent and reported every
+        # figure uncaptioned — measured 2026-10-15 on the-top-step, 19 false misses.
+        if re.match(r'^captions:\s*(#.*)?$', line):
             inblock, imgblock = True, False
             continue
-        if re.match(r'^images:\s*$', line):
+        if re.match(r'^images:\s*(#.*)?$', line):
             imgblock, inblock = True, False
             continue
         if imgblock:

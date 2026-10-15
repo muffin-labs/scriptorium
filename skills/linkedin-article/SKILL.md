@@ -108,6 +108,11 @@ scratch is the one editor allowed to be overwritten. Never Publish from it.
    - **Upload from the local file, never a carried data URI.** Find that input and use the
      browser tool's file upload on `assets/hero.png` (the path in `cover.json`). Do not click the
      input — that opens a native picker nobody can drive. Then **Next** in the dialog.
+     **In the built-in pane there is no file-upload tool**, and this is how it went in there
+     (2026-10-15, the-top-step): carry the cover's served copy, decode it in the page into a
+     `File`, and set it on that same input — `const dt = new DataTransfer(); dt.items.add(file);
+     input.files = dt.files; input.dispatchEvent(new Event('change', {bubbles: true}))`. The
+     dialog takes it as an upload; reload and read back the `article-cover` image as below.
    - **Caption, then WAIT.** The cover lands with an *Add credit and caption* textbox under it;
      type `cover.json`'s `caption` there. The cover's `src` is a `data:` URI until the autosave —
      **navigating away inside ~15 s lost the cover once** (the caption survived, the image did
@@ -126,7 +131,14 @@ scratch is the one editor allowed to be overwritten. Never Publish from it.
      `button.click()` did.** Read the public page back: one `article-cover` image, the diagrams
      `article-inline`, the hero not repeated.
 
-5. **Figures, one at a time.** For figure *N*: carry `<out>/fig<N>.json`, find the paragraph
+5. **Figures, a batch at a time.** `md_to_linkedin` writes `figures<k>.json` — as many figures as
+   fit one carry (~3.5 MB), each the served copy (1600 px JPEG), not the master. Carry a batch,
+   insert every figure in it as below, then wait for *Draft - saved* with no `imagePlaceholder`
+   left and reload to confirm the `src`s are `media.licdn.com` **before** carrying the next batch
+   (a navigation before the save loses the unsaved uploads). The-top-step's nineteen figures
+   (2026-10-15) went in as five hand-built batches; the converter now builds them, three.
+   `fig<N>.json` still exists for a single figure.
+   For figure *N*: take it from the batch (or carry `<out>/fig<N>.json`), find the paragraph
    whose text starts `[Figure N — upload here]`, `E.commands.setNodeSelection(pos)`, and paste an
    `<img>` **built with `document.createElement`** so its alt is escaped properly (the shared
    renderer's `esc()` does not escape quotes). It lands as `figureImage` → `inlineImage` +

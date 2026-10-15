@@ -47,8 +47,23 @@ def _yaml(path):
         return yaml.safe_load(fh) or {}
 
 
+def manifest_path(text_dir):
+    """A text's manifest by namespace: a piece's publish.yaml, or a talk's talk.yaml. None if
+    neither — and the caller must exit NON-ZERO then: a gate that cannot look must not wear a
+    pass's face (backlog: the-outlet-gates-cannot-see-a-talk, 2026-10-15)."""
+    for name in ('publish.yaml', 'talk.yaml'):
+        p = os.path.join(text_dir, name)
+        if os.path.exists(p):
+            return p
+    return None
+
+
 def declared(piece_dir):
-    man = _yaml(os.path.join(piece_dir, 'publish.yaml'))
+    mp = manifest_path(piece_dir)
+    if mp is None:
+        print(f"REFUSING: {piece_dir} has no publish.yaml or talk.yaml — nothing says where it goes.")
+        sys.exit(4)
+    man = _yaml(mp)
     out = man.get('outlets')
     if not out and man.get('site') is True:
         return ['<legacy site: true>']
@@ -101,7 +116,7 @@ def main():
         print("REFUSING: this piece declares no `outlets:`.")
         print("  Publishing to the obvious one is how a piece ends up live on one host and")
         print("  missing from another. Ask which outlets it is for, write them into")
-        print(f"  {piece}/publish.yaml, then publish.")
+        print(f"  {os.path.basename(manifest_path(piece) or 'publish.yaml')} in {piece}, then publish.")
         sys.exit(4)
 
     bad = 0
