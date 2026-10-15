@@ -41,6 +41,7 @@ WHY THIS EXISTS
   USAGE   python3 tools/img_deck.py <talk-dir> <out-dir> --runtime <deck-stage.js>
                   [--check] [--width N] [--quality N] [--keep-png]
           python3 tools/img_deck.py <talk-dir> --md <file.md>
+          python3 tools/img_deck.py <talk-dir> --map <assets/SPECS.md>
 
           --check  verify and report, write nothing. Use it before a publish.
           --md     write a READING COPY instead of a deck: one markdown file, every
@@ -48,6 +49,11 @@ WHY THIS EXISTS
                    the speaker, who needs to read the talk straight through on a page —
                    the deck shows one slide at a time and the draft is wrapped in the
                    slide dialect. Regenerated, never hand-edited: the draft is the source.
+                   The clock uses talk.yaml's `pace_wpm` (default 130, as md_to_marp.py).
+          --map    regenerate the SLIDE MAP inside a spec file, between the lines
+                   `<!-- slide-map -->` and `<!-- /slide-map -->`: slide number, file,
+                   movement, label, and whether the picture is on disk yet. Does not need
+                   the pictures to exist. The map is the only place a slide is numbered.
           --width    longest edge of the SERVED image (default 1600; 0 keeps the original)
           --quality  JPEG quality of the served image (default 82)
           --keep-png copy the masters through untouched instead
@@ -446,15 +452,19 @@ def build(talk_dir, out_dir, runtime, check=False, width=1600, quality=82):
 def write_markdown(talk_dir, slides, man, out):
     slug = os.path.basename(os.path.normpath(talk_dir))
     words = sum(len(' '.join(s['notes']).split()) for s in slides)
-    wpm = 115
+    # The talk's own pace, as md_to_marp.py reads it. This was a hard-coded 115 — the pace of
+    # the one voice the tool was first built for — so any other talk's clock came out wrong.
+    wpm = float(man.get('pace_wpm', 130))
     L = [f"# {man.get('title', slug)}", '']
     if man.get('subtitle'):
         L += [f"*{man['subtitle']}*", '']
     L += [f"**{len(slides)} slides · {words} spoken words · about "
-          f"{words / wpm:.0f} minutes at {wpm} words a minute**, before the pictures are read "
+          f"{words / wpm:.0f} minutes at {wpm:.0f} words a minute**, before the pictures are read "
           f"aloud." if words else '', '']
     L += ['*A reading copy, generated from `draft.md`. Every picture is the slide; the words '
-          'under it are what is said while it is up. Edit the draft, never this file.*', '', '---', '']
+          'under it are what is said while it is up. Edit the draft, never this file. A slide '
+          'number is a position as of this regeneration; the file name under it is the '
+          'slide.*', '', '---', '']
     seen_mv = None
     for i, s in enumerate(slides, 1):
         if s['movement'] and s['movement'] != seen_mv:
@@ -472,8 +482,46 @@ def write_markdown(talk_dir, slides, man, out):
     return {'slides': len(slides), 'words': words}
 
 
+MAP_OPEN, MAP_CLOSE = '<!-- slide-map -->', '<!-- /slide-map -->'
+
+
+def write_map(talk_dir, slides, path):
+    """Rewrite the slide map between the markers in a spec file, from the draft.
+
+    A spec is addressed by FILE; the map is the only place a slide is numbered, and it is
+    regenerated, never kept by hand. The Top Step's map was hand-kept through four insertions,
+    a swap and a replacement on one morning, and ended with two S07s and a slide missing.
+    Images are not required: specs are written before pictures exist, and the map's last
+    column is then the list of what is still to generate.
+    """
+    if not os.path.exists(path):
+        die(1, f'{path}: no such file')
+    text = open(path, encoding='utf-8').read()
+    a, b = text.find(MAP_OPEN), text.find(MAP_CLOSE)
+    if a < 0 or b < a:
+        die(1, f'{path}: no {MAP_OPEN} … {MAP_CLOSE} block to regenerate — '
+               'add the two markers where the map belongs')
+    rows = ['| slide | file | movement | label | on disk |', '|---|---|---|---|---|']
+    missing = 0
+    for i, s in enumerate(slides, 1):
+        if s['img']:
+            here = os.path.exists(os.path.join(talk_dir, s['img']))
+            missing += not here
+            f = f"`{os.path.basename(s['img'])}`"
+        else:
+            here, f = False, '*(no image in the draft)*'
+            missing += 1
+        label = s['label'] if s['label'] and s['label'] != s['movement'] else ''
+        rows.append(f"| {i:02d} | {f} | {s['movement'] or ''} | {label} | "
+                    f"{'yes' if here else '**not yet**'} |")
+    block = '\n'.join([MAP_OPEN, '', *rows, '', MAP_CLOSE])
+    with open(path, 'w', encoding='utf-8') as fh:
+        fh.write(text[:a] + block + text[b + len(MAP_CLOSE):])
+    print(f'wrote the slide map in {path}: {len(slides)} slides, {missing} not yet on disk')
+
+
 def main():
-    args, runtime, check, md = [], None, False, None
+    args, runtime, check, md, map_to = [], None, False, None, None
     width, quality = 1600, 82
     it = iter(sys.argv[1:])
     for a in it:
@@ -481,6 +529,8 @@ def main():
             runtime = next(it, None)
         elif a == '--md':
             md = next(it, None)
+        elif a == '--map':
+            map_to = next(it, None)
         elif a == '--check':
             check = True
         elif a == '--keep-png':
@@ -493,6 +543,14 @@ def main():
             die(1, f'unknown option {a}')
         else:
             args.append(a)
+    if map_to:
+        if len(args) != 1:
+            die(1, 'usage: img_deck.py <talk-dir> --map <SPECS.md>')
+        draft = os.path.join(args[0], 'draft.md')
+        if not os.path.exists(draft):
+            die(1, f'{os.path.basename(args[0])}: no draft.md')
+        write_map(args[0], parse(open(draft, encoding='utf-8').read()), map_to)
+        return
     if md:
         if len(args) != 1:
             die(1, 'usage: img_deck.py <talk-dir> --md <file.md>')

@@ -21,6 +21,28 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **`picture-deck`: a talk built one picture at a time from its reading copy.** The method *The
+  Top Step* was built by on 2026-10-14/15 (27 slides), written down. The desk writes a spec per
+  picture in `assets/SPECS.md`. The author generates each image and sends it with a position
+  ("make this slide 4"). Each turn checks the picture against its spec character by character,
+  writes the slide's alt text and spoken beat into `draft.md`, regenerates `preview.md` and the
+  slide map, and commits that one slide. The rules come from that session's corrections:
+  specs addressed by file and never by number, a position resolved against the preview the
+  author last read and confirmed from the picture, no positional references in the script,
+  alt text that describes what the picture shows, and defects batched per round because a
+  generated frame can only be remade. `talk` points to it. MINOR.
+- **`img_deck.py --map <SPECS.md>` regenerates a deck's slide map from the draft.** It rewrites
+  the block between `<!-- slide-map -->` and `<!-- /slide-map -->` with slide number, file,
+  movement, label and whether the picture is on disk yet. It does not need the pictures, so
+  before the deck is done the map doubles as the list of pictures still to make. *The Top
+  Step*'s map was kept by hand through four insertions, a swap and a replacement in one morning,
+  and ended with two `S07`s and one slide missing. MINOR.
+- **`img_deck.py --md` reads the talk's pace from `talk.yaml`'s `pace_wpm`** (default 130, as in
+  `md_to_marp.py`) instead of a hard-coded 115. 115 is one voice's pace, so every other talk's
+  reading copy showed the wrong time. The reading copy now also says that a slide number is a
+  position and the file name is the slide. **A talk whose clock relied on the old 115 should
+  add `pace_wpm: 115` to its `talk.yaml`.** PATCH.
+
 - **`voice_privacy` stops reading a style's own checker as the author's prose.** A voice may ship
   MECHANISM beside its constitution — `styles/<name>/check.py`, the mechanical half of a critique
   — and mechanism is not voice: it is usually ported FROM the framework, so it shares whole lines
