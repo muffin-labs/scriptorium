@@ -75,7 +75,7 @@ def read_manifest(path):
                 continue
             if ':' in line:
                 k, v = line.split(':', 1)
-                k, v = k.strip(), v.strip()
+                k, v = k.strip(), _unquote(v.strip())
                 if v == '':                                          # opens a nested block
                     block = k
                     m[k] = {}
@@ -83,6 +83,28 @@ def read_manifest(path):
                     block = None
                     m[k] = v
     return m
+
+
+def _unquote(v):
+    """Strip ONE matched pair of surrounding quotes from a scalar, the way a YAML parser would.
+
+    `title: "X"` is the ordinary way to write a title, and this parser used to hand back the
+    quotes as part of the value -- so a post composed as '"X"' in the two fields a reader sees
+    first. Found live mid-publish 2026-10-14, twice: md_to_substack's header, and then
+    substack_repatch re-staging the same quotes onto an already-published post.
+
+    The defect was known. `_yaml_manifest` was added 2026-09-11 for exactly this ("a quoted
+    caption arrived with its outer quotes on"), and piece_header.py and substack_notes.py each
+    carry their own `.strip('"\'')` against it. Three local patches for one upstream bug is the
+    signal to fix the parser instead; those patches stay, and are now redundant rather than
+    load-bearing.
+
+    A YAML block scalar opener (`>`, `>-`, `|`, `|-`) is not a quoted string and is left alone,
+    as is any value whose quotes are not a matched surrounding pair.
+    """
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in '"\'':
+        return v[1:-1]
+    return v
 
 UNSETTLED = re.compile(r'\b(?:proposed|proposal|not (?:yet )?settled|unsettled|placeholder|tbd|tk|working title)\b', re.I)
 SETTLED = re.compile(r'(?<!not )(?<!not yet )(?<!un)settled\b', re.I)
@@ -992,9 +1014,17 @@ def main():
     html, footnotes, stripped, residual, unverified, fn_issues = convert(piece_dir)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import substack_account as sa
+    # The HEADER goes through a real YAML parser, never read_manifest(). read_manifest keeps a
+    # quoted value's quotes, and `title: "X"` is the ordinary way to write a title -- so the
+    # post was composed as '"X"', quote marks and all, in the two fields a reader sees first.
+    # Caught 2026-10-14 mid-compose, in the editor. This is the SAME bug _yaml_manifest was
+    # added for on 2026-09-11 (a quoted caption arrived with its outer quotes on); that repair
+    # covered captions and left the header, which is the more visible half. Four manifests in
+    # this corpus quote their title.
+    _hdr = _yaml_manifest(piece_dir, man)
     js = sa.guarded(piece_dir, JS_TEMPLATE
-                    .replace('%TITLE%', json.dumps(man.get('title', '')))
-                    .replace('%SUBTITLE%', json.dumps(man.get('subtitle', '')))
+                    .replace('%TITLE%', json.dumps(_hdr.get('title', '')))
+                    .replace('%SUBTITLE%', json.dumps(_hdr.get('subtitle', '')))
                     .replace('%BODY%', json.dumps(html))
                     .replace('%FOOTNOTES%', json.dumps(footnotes)), 'md_to_substack')
     print(f"paragraphs~{html.count('<p>')}  headings~{html.count('<h2>')+html.count('<h3>')}  "

@@ -100,6 +100,22 @@ GitHub release with the same text.
   (`test_concurrency.py` invokes `git` with an explicit argv and no shell, inside a repository of
   its own under `tempfile.TemporaryDirectory()`, because the provenance it tests *is* the
   repository's record; the tree-untouched hash check is what holds that honest.)
+- **`read_manifest()` strips a scalar's surrounding quotes, the way a YAML parser would** —
+  PATCH, and it was reaching readers. `title: "X"` is the ordinary way to write a title, and this
+  parser handed back the quotes as part of the value, so a Substack post composed as `"X"` with
+  literal quote marks **in the two fields a reader sees first**. Caught live mid-publish twice in
+  one session: once from `md_to_substack` composing a fresh post, then again from
+  `substack_repatch` re-staging the same quotes onto an already-published one. The defect was
+  known and had been patched three times locally rather than at the source — `_yaml_manifest` was
+  added 2026-09-11 for exactly this (a quoted caption arriving with its quotes on), and
+  `piece_header.py` and `substack_notes.py` each carry their own `.strip('"\'')`. Those stay and
+  are now redundant rather than load-bearing. A YAML block-scalar opener (`>`, `>-`, `|`, `|-`) is
+  left alone. Every importer of `read_manifest` is fixed by this, including `substack_repatch`,
+  `substack_sync`, `md_to_clipboard`, `md_to_dc` and `md_to_marp`.
+- **`md_to_substack` reads the post header through a real YAML parser** (`_yaml_manifest`) rather
+  than `read_manifest`, belt-and-braces alongside the fix above: the header is the most visible
+  text a post has, and the YAML path also handles escapes and multi-line scalars the line parser
+  cannot.
 
 - **The reference sweep — a convention for reading a shelf larger than the context window.**
   `docs/REFERENCE-SWEEP.md`, and a section in `CLAUDE.md`. `references.py search` answers any
