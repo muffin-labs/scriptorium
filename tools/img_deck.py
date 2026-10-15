@@ -84,6 +84,8 @@ EXIT  0 built (or --check clean) · 1 usage · 2 a fault — the message names t
 
 import html
 import json
+import hashlib
+import io
 import os
 import re
 import shutil
@@ -254,22 +256,42 @@ def serve_copy(src, dst_dir, width, quality):
 
     Resized and re-encoded, never cropped: the deck's stage is the images' own aspect,
     so a crop here would silently cut a carved word off the edge of a slide.
+
+    THE FILENAME CARRIES A HASH OF THE SERVED BYTES, and that is not decoration.
+    The store gives an asset `Cache-Control: max-age=31536000, immutable`, which is a
+    promise that the bytes at that URL never change. A slide regenerated under the same
+    name breaks the promise: the CDN can be invalidated, but a BROWSER that already has
+    the file holds it for a year and no invalidation reaches it.
+
+    Measured 2026-10-15 on the-top-step: four slides were replaced after the deck had
+    been published once, the re-publish was verified byte-for-byte against the CDN and
+    was correct — and the author's browser went on showing all four old pictures. The
+    verification could not see it, because nothing served was wrong. A content hash in
+    the name makes `immutable` true: a changed picture is a NEW URL, so no cache
+    anywhere can answer for it. The old object stays in the store, unreferenced and
+    harmless, because a publish is additive.
     """
     base = os.path.splitext(os.path.basename(src))[0]
     if not width or Image is None:
-        out = os.path.join(dst_dir, os.path.basename(src))
-        shutil.copy2(src, out)
-        return os.path.basename(src), os.path.getsize(out)
+        data = open(src, 'rb').read()
+        ext = os.path.splitext(src)[1]
+        name = f'{base}.{hashlib.sha256(data).hexdigest()[:8]}{ext}'
+        with open(os.path.join(dst_dir, name), 'wb') as fh:
+            fh.write(data)
+        return name, len(data)
     im = Image.open(src)
     im = im.convert('RGB')
     if max(im.size) > width:
         scale = width / max(im.size)
         im = im.resize((round(im.width * scale), round(im.height * scale)),
                        Image.LANCZOS)
-    name = base + '.jpg'
-    out = os.path.join(dst_dir, name)
-    im.save(out, 'JPEG', quality=quality, optimize=True, progressive=True)
-    return name, os.path.getsize(out)
+    buf = io.BytesIO()
+    im.save(buf, 'JPEG', quality=quality, optimize=True, progressive=True)
+    data = buf.getvalue()
+    name = f'{base}.{hashlib.sha256(data).hexdigest()[:8]}.jpg'
+    with open(os.path.join(dst_dir, name), 'wb') as fh:
+        fh.write(data)
+    return name, len(data)
 
 
 def build(talk_dir, out_dir, runtime, check=False, width=1600, quality=82):
