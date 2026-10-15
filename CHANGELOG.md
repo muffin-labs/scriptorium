@@ -21,6 +21,31 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **A second path to a published deck, for a talk whose every slide is a picture.**
+  `tools/img_deck.py`. The existing path — draft → `md_to_dc.py` → a Claude Design canvas →
+  `dc_to_deck.py` → `talk_bundle.py` — exists because a typographic deck needs a design pass.
+  A deck built the other way round has none to make: when every slide is an image generated to
+  a written specification, with its words carved or lettered inside the frame, the canvas has
+  no layout work in it and `md_to_dc.py verify` has nothing to read, because the words are
+  pixels. This builds the same output directory `talk_bundle.py` already consumes — `deck.html`
+  (`<deck-stage>` + one `<section>` per slide, the same embedder relay `dc_to_deck.py` emits),
+  `notes.json`, `deck-stage.js`, `assets/` — straight from `draft.md`.
+  **It refuses any slide it cannot render as one picture**, rather than rendering half of it: no
+  image, two images, or an image plus text still set as type are each a fault that stops the run
+  and names the slide. A deck of pictures has no fallback rendering, so a missing image is a
+  blank slide, not a plainer one. **Each image's alt text becomes the slide's accessible text**,
+  which in this deck is the only route its words have to a screen reader — so an empty alt is a
+  fault too. Speaker notes stay the draft's prose, so the draft is still the one source of the
+  script whichever path a talk takes.
+  **The desk keeps the masters; the deck ships what a phone can load.** Served copies are resized
+  (`--width`, default 1600) and re-encoded as JPEG (`--quality`, default 82), never cropped —
+  a crop would silently cut a carved word off a slide edge. The first deck through it went from
+  56 MB of PNG masters to 6.2 MB served. `--keep-png` copies the masters through instead, and
+  over 20 MB it warns that the result is a download rather than a page.
+  Choosing between the two: type on a slide goes through the canvas, because something has to
+  decide how that type looks; finished pictures come through here; a deck that mixes them goes
+  through the canvas. MINOR.
+
 - **`prepush.py` fetches before it judges the framework pointer, and says what it actually
   checked.** The guard read `refs/remotes/origin/main` as it stood — this clone's MEMORY of the
   remote, not the remote — so once a sibling session pushed the framework, an instance push whose
