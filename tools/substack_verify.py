@@ -290,6 +290,32 @@ def fetch_public(url, fresh=False, attempts=ATTEMPTS):
 
 
 def extract_post(page_html):
+    """The post object out of the page's own preload blob.
+
+    TWO SHAPES, because Substack changed this and the change was invisible until it was
+    load-bearing. The old shape inlined the JSON as an escaped string literal:
+
+        window._preloads = JSON.parse("{\\"post\\":...}")</script>
+
+    The new one (first seen 2026-11-02) ships the JSON in its own element and makes the
+    assignment a runtime read of it:
+
+        <script id="preloads-json" type="application/json">{...}</script>
+        window._preloads = JSON.parse(document.querySelector('script#preloads-json...').textContent)
+
+    So the old regex matched nothing on a page that was perfectly readable, and the tool
+    reported UNREACHABLE -- "login wall or layout change?" -- for EVERY live post. Which is
+    the failure this tool exists to not have: its own exit code says a run that verified
+    nothing is not a pass, and that is the only reason the break was caught rather than
+    being read as a clean sweep. The new shape is tried first because it is what Substack
+    serves now; the old one stays because a cached or archived page may still carry it.
+    """
+    m = re.search(r'<script[^>]*\bid="preloads-json"[^>]*>(.*?)</script>', page_html, re.S)
+    if m:
+        try:
+            return json.loads(m.group(1)).get('post')
+        except json.JSONDecodeError:
+            pass
     m = re.search(r'window\._preloads\s*=\s*JSON\.parse\((".*?")\)\s*;?\s*</script>',
                   page_html, re.S)
     if not m:
