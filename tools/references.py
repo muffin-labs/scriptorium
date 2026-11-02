@@ -820,6 +820,11 @@ def _shelf_targets(r):
     ok, refused = [], []
     by_name = {x["file"]: x for x in rows(r) if x.get("file") and "unparsed" not in x}
     for f in files_on_disk(r):
+        # The shelf's own config is not a source and never gets a manifest row. Without
+        # this it is refused on every push for the rest of time — a standing warning that
+        # reports correct behaviour, which is how real refusals stop being read.
+        if f == os.path.basename(SHELF_CONFIG):
+            continue
         row = by_name.get(f)
         if not row:
             refused.append((f, "no manifest row")); continue
