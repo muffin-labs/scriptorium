@@ -2,23 +2,37 @@
 """substack_account.py — which browser a Substack operation runs in, and is it the right person?
 
 WHY (2026-09-11).  A desk can own several Substack outlets on different accounts — one per
-byline, because a Substack profile has one display name across every publication under it. A
-Substack login is ONE cookie for every `*.substack.com` publication, and the built-in browser
-pane's cookie store is shared by every tab and every session: a cookie set in one pane tab was
-present in a fresh one, and a session that had never signed in found the pane signed in as the
-other session's account. So the pane can hold one Substack account, never two — and signing it
-out, or into another account, silently turns every concurrent session's work into the other
-byline's: a compose lands in the wrong publication, a re-sync edits a post its session does not
-own, and nothing errors.
+byline, because a Substack profile has one display name across every publication under it. The
+built-in pane's cookie store is shared by every tab and every session: a cookie set in one pane
+tab was present in a fresh one, and a session that had never signed in found the pane signed in
+as the other session's account. So signing the pane out, or into another account, silently turns
+every concurrent session's work into the other byline's — and THAT rule stands unchanged.
 
-THE RULE (Eric, 2026-09-11).  With more than one Substack outlet, ONE is the PRIMARY. The primary
-uses the built-in browser pane for all its Substack operations; every other Substack outlet opens
-in Claude in Chrome, each in its own named browser holding its own login. Naming the primary
-explicitly beats inferring it from whatever the pane happens to be signed in as. Changing it is a
-deliberate, desk-wide act (`primary <outlet>`), because it changes whose login the pane must hold.
+WHAT WAS WRONG WITH IT (measured 2026-11-03).  This file used to conclude from the shared cookie
+store that "the pane can hold one Substack account, never two". It holds both. Two `profile/self`
+fetches, nothing signed in or out: `elmuffin.substack.com` answered `elmuffin`,
+`muffinlabs.substack.com` answered `ericgarciaphd`. SUBSTACK RESOLVES THE ACCOUNT PER
+PUBLICATION. There is no switching between them, and therefore no byline to lose. What believing
+otherwise cost: `scaling-computer-vision-workflows-aws` sat one block behind its live post from
+2026-09-18 to 2026-11-02, and the work was filed as *blocked on a surface this desk does not
+have*. It was not blocked; the pane did it in one pass as soon as the assumption was checked
+instead of quoted.
 
-Every write still proves it is on the right account first (`check`), so a session caught
-mid-switch is refused rather than published under the wrong byline.
+THE RULE (amended 2026-11-03).  THE ACCOUNT IS THE GATE; THE SURFACE IS A PREFERENCE. What makes
+a write safe is that the account is settled by a same-origin fetch against THE OUTLET'S OWN
+PUBLICATION HOST immediately before the write, and that the snippet re-checks it in the same eval
+as the work (`guard_js`). So: a wrong account is a refusal wherever it is found (exit 5). A right
+account on a surface the table did not route to is a PASS, with a note (exit 0) — the table is a
+static assertion, and it was overruling a measurement.
+
+`substack_primary:` is therefore a PREFERENCE: it says which surface to reach for first — the
+pane for the primary, a named Chrome browser for an outlet that wants one of its own — and
+nothing is refused for being on the other. It is still worth declaring, because reaching for the
+right surface first is cheaper than discovering the wrong one.
+
+This is NOT "any account works anywhere". An outlet is written only from a page on its own
+publication, signed in as its own handle, proven per write. That is what made the MuffinLabs
+re-sync safe from the pane; the table was not.
 
 CONFIG (instance-side, publishing/outlets.yaml; the framework holds no handles)
 
@@ -27,11 +41,11 @@ CONFIG (instance-side, publishing/outlets.yaml; the framework holds no handles)
       substack:
         reader_base: https://elmuffin.substack.com/p/
         account_handle: elmuffin          # the profile handle that must be signed in to write
-        chrome_browser: <name>            # only needed if it is ever demoted
+        chrome_browser: <name>            # optional: a surface of its own, never a permission
       substack-muffinlabs:
         reader_base: https://muffinlabs.substack.com/p/
         account_handle: ericgarciaphd
-        chrome_browser: eric@muffinlabs.ai   # REQUIRED for a non-primary: it opens in Chrome
+        chrome_browser: eric@muffinlabs.ai   # where to reach for it first; the pane works too
 
   A Substack outlet is one whose `reader_base` is on `*.substack.com`, or that says
   `platform: substack` (a custom domain). With only one Substack outlet it is the primary without
@@ -39,7 +53,7 @@ CONFIG (instance-side, publishing/outlets.yaml; the framework holds no handles)
   but it is a Notes-feed display setting, never a write permission.
 
 USAGE
-    substack_account.py route <outlet>          # its surface (pane | chrome + browser), account, snippet
+    substack_account.py route <outlet>          # which surface to reach for FIRST, its account, the snippet
     substack_account.py primary                 # the primary, and where every Substack outlet runs
     substack_account.py primary <outlet>        # make <outlet> the primary (edits outlets.yaml)
     substack_account.py check <outlet> --surface pane|chrome --result '<the snippet's JSON>'
@@ -79,7 +93,9 @@ EXIT
   0  ok — signed in as the outlet's account, on the outlet's surface (or: primary changed)
   1  usage, or no such outlet
   3  signed out — the author signs in (automation never enters credentials)
-  4  checked on the wrong surface — this outlet runs in the other browser
+  4  RETIRED 2026-11-03, and never returned. It meant "checked on the wrong surface", and it
+     refused a correct account because the routing table pointed elsewhere. The surface is a
+     preference; off-preference with the right account is exit 0 with a note
   5  signed in as SOMEONE ELSE — stop; do not write here, and do not switch this surface
   6  misconfigured — no account_handle, several Substack outlets and no primary, a non-primary
      with no chrome_browser, or a demotion that would leave an outlet nowhere to run
@@ -144,11 +160,22 @@ def shown(spec):
 
 
 def origin_ok(spec, origin):
-    """Is an answer read on `origin` about this outlet's account? Its own reader host, or any
-    *.substack.com page — one login cookie covers them all."""
+    """Is an answer read on `origin` about this outlet's account?
+
+    ONLY ON THE OUTLET'S OWN PUBLICATION (tightened 2026-11-03). This used to accept any
+    *.substack.com page, on the premise that one login cookie covers them all. The cookie does;
+    THE ANSWER DOES NOT. `profile/self` is resolved PER PUBLICATION — measured the same day,
+    nothing signed in or out: `elmuffin.substack.com` answered `elmuffin` and
+    `muffinlabs.substack.com` answered `ericgarciaphd`. So a handle read on one publication says
+    nothing about who you are on another, and `check` now insists on the host the write will run
+    against — which is what `guard_js` already insisted on in the same eval as the work."""
     host = urlparse(str(origin or '')).hostname or ''
-    own = urlparse(str((spec or {}).get('reader_base') or '')).hostname or ''
-    return bool(host) and (host == own or host == 'substack.com' or host.endswith('.substack.com'))
+    hosts = publish_hosts(spec)
+    if not hosts:
+        # A custom-domain publication whose `*.substack.com` host nobody has recorded: the account
+        # alone, exactly as `guard_js` falls back. Name `publish_host:` to get the stricter check.
+        return bool(host) and (host == 'substack.com' or host.endswith('.substack.com'))
+    return host in hosts
 
 
 def browser_steps(chrome_browser):
@@ -204,16 +231,22 @@ def route(doc, name):
     prim, problem = primary(doc)
     is_primary = (name == prim)
     r = {'outlet': name, 'account': expected(spec), 'primary': is_primary,
+         # Where to REACH FIRST — never what permits the write, which is the account (2026-11-03).
          'surface': 'pane' if is_primary else 'chrome',
+         'surface_is_preference': True,
          'chrome_browser': (spec or {}).get('chrome_browser'),
-         'problem': None, 'snippet': SNIPPET, 'browser_steps': []}
+         'problem': None, 'note': None, 'snippet': SNIPPET, 'browser_steps': []}
     if not is_substack(spec):
         r['problem'] = f"{name} is not a Substack outlet"
     elif problem and prim is None:
         r['problem'] = problem
     elif not is_primary and not r['chrome_browser']:
-        r['problem'] = (f"{name} is not the primary, so it opens in Claude in Chrome — but it names "
-                        f"no chrome_browser. Add the browser that holds its login to outlets.yaml.")
+        # Was exit 6, "nowhere to run". The pane resolves every publication's account at once, so
+        # it HAS somewhere to run: there.
+        r['note'] = (f"{name} is not the primary and names no chrome_browser, so reach for the "
+                     f"built-in pane — it resolves @{r['account']} on {name}'s own publication. "
+                     f"Name a chrome_browser in outlets.yaml to give it a surface of its own.")
+        r['surface'] = 'pane'
     if not is_primary and r['chrome_browser']:
         r['browser_steps'] = browser_steps(r['chrome_browser'])
     return r
@@ -236,18 +269,20 @@ def verdict(doc, name, result, surface):
                if shown(spec) else "")
         return 6, (f"{name} names no account_handle{why} — refusing rather than assuming who may "
                    f"write there. Add one to outlets.yaml.")
-    where = ("the built-in pane (it is the primary)" if r['surface'] == 'pane'
-             else f"Claude in Chrome, browser {r['chrome_browser']!r}")
-    if surface != r['surface']:
-        return 4, (f"STOP: {name} runs in {where}, not the {surface}. Checking or writing it here "
-                   f"would use whichever account this surface holds.")
+    # The account is read FIRST and the surface only noted (2026-11-03). This used to return 4
+    # right here, before looking at the answer at all — refusing a correct account because a
+    # static table said the outlet lived on the other surface.
+    prefers = ("the built-in pane (it is the primary)" if r['surface'] == 'pane'
+               else f"Claude in Chrome, browser {r['chrome_browser']!r}")
+    where = "the built-in pane" if surface == 'pane' else "Claude in Chrome"
     if not isinstance(result, dict) or 'signed_in' not in result or 'origin' not in result:
         return 7, ("that is not the snippet's answer. Run `route`'s snippet in that browser and pass "
                    "its JSON verbatim — a handle typed in proves nothing.")
-    own = urlparse(str(spec.get('reader_base') or '')).hostname or '*.substack.com'
+    own = ' / '.join(publish_hosts(spec)) or '(no *.substack.com host recorded — add publish_host:)'
     if not origin_ok(spec, result.get('origin')):
-        return 7, (f"the snippet ran on {result.get('origin')!r}, which is neither {name}'s "
-                   f"publication nor a Substack page. Run it on {own}.")
+        return 7, (f"the snippet ran on {result.get('origin')!r}, which is not {name}'s own "
+                   f"publication. Substack resolves the account PER PUBLICATION, so an answer "
+                   f"read anywhere else settles nothing about who you are here. Run it on {own}.")
     if not result.get('signed_in'):
         status = result.get('status')
         if status in SIGNED_OUT:
@@ -262,9 +297,14 @@ def verdict(doc, name, result, surface):
     if got != want:
         return 5, (f"STOP: {where} is signed in as @{got}, and {name} needs @{want}. Do not write, "
                    f"and do not sign this surface into another account — "
-                   + ("every session shares the pane's login." if r['surface'] == 'pane'
+                   + ("every session shares the pane's login." if surface == 'pane'
                       else "fix the browser's login, or the outlet's chrome_browser."))
-    return 0, f"ok: {where} is signed in as @{got}, the account {name} publishes as"
+    ok = f"ok: {where} is signed in as @{got}, the account {name} publishes as"
+    if surface != r['surface']:
+        ok += (f". Note: {name} prefers {prefers}, which is a PREFERENCE and not a permission — "
+               f"the account is what permits the write, and it checks out. Proceed here, and "
+               f"write from the surface you just checked, not the other one")
+    return 0, ok
 
 
 # ------------------------------------------------------------------ the guard in every snippet
@@ -500,13 +540,10 @@ def set_primary(path, name):
     old, _ = primary(doc)
     if old == name and doc.get(PRIMARY_KEY) == name:
         return 0, f"{name} is already the primary"
-    if old and old != name and not (doc['outlets'][old] or {}).get('chrome_browser'):
-        return 6, (f"demoting {old} would send it to Claude in Chrome, but it names no chrome_browser — "
-                   f"add the browser that holds @{expected(doc['outlets'][old])}'s login first")
+    # Demoting an outlet that names no chrome_browser was exit 6, "nowhere to run". It has
+    # somewhere: the pane, which resolves its account on its own publication (2026-11-03). The
+    # switch says so rather than refusing.
     others = [n for n in substack_outlets(doc) if n != name]
-    homeless = [n for n in others if not (doc['outlets'][n] or {}).get('chrome_browser')]
-    if homeless:
-        return 6, f"{', '.join(homeless)} would have nowhere to run: add a chrome_browser first"
 
     src = open(path, encoding='utf-8').read()
     line = f"{PRIMARY_KEY}: {name}"
@@ -528,8 +565,14 @@ def set_primary(path, name):
     msg.append(f"  Sign the PANE in as @{want} — until then every write to {name} is refused (check exit 5).")
     for n in others:
         s = doc['outlets'][n] or {}
-        msg.append(f"  {n} opens in Claude in Chrome, browser {s.get('chrome_browser')!r} — "
-                   f"it must be signed in as @{expected(s) or shown(s)}.")
+        who = expected(s) or shown(s)
+        if s.get('chrome_browser'):
+            msg.append(f"  {n} opens in Claude in Chrome, browser {s.get('chrome_browser')!r} — "
+                       f"it must be signed in as @{who}.")
+        else:
+            msg.append(f"  {n} names no chrome_browser, so reach for the pane for it too — it "
+                       f"resolves @{who} on {n}'s own publication. Name one only if {n} wants a "
+                       f"surface of its own.")
     msg.append("  The pane's login is shared by every session: tell anyone mid-write before you switch it.")
     return 0, "\n".join(msg)
 
@@ -541,8 +584,9 @@ def load_text_primary(text):
 def _describe(r):
     if r['problem']:
         return f"UNRUNNABLE — {r['problem']}"
-    return ("built-in pane (primary)" if r['surface'] == 'pane'
+    pref = ("built-in pane (primary)" if r['surface'] == 'pane'
             else f"Claude in Chrome, browser {r['chrome_browser']!r}")
+    return f"reach for {pref} first — a preference; the ACCOUNT is the gate"
 
 
 def main(argv=None):
@@ -555,7 +599,8 @@ def main(argv=None):
     p = sub.add_parser('guard'); p.add_argument('piece')
     p = sub.add_parser('check'); p.add_argument('outlet')
     p.add_argument('--surface', choices=('pane', 'chrome'), required=True,
-                   help='where the snippet ran; checking in the wrong browser is exit 4')
+                   help='where the snippet ran — and where you will write; a surface the outlet '
+                        'does not prefer still passes if the account checks out')
     p.add_argument('--result', required=True,
                    help="the snippet's JSON answer, verbatim ('-' reads it from stdin)")
     p.add_argument('--json', action='store_true', help='print the verdict as JSON')
@@ -593,6 +638,8 @@ def main(argv=None):
             return 1
         print(f"outlet   {r['outlet']}\naccount  @{r['account'] or '?  (no account_handle — check will refuse)'}\n"
               f"surface  {_describe(r)}")
+        if r['note']:
+            print(f"note     {r['note']}")
         for i, step in enumerate(r['browser_steps'], 1):
             print(f"  {i}. {step}")
         print(f"snippet  {r['snippet']}")

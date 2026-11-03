@@ -68,12 +68,15 @@ next completed `seal`; nothing needs re-sealing on purpose.
 - The piece is live and `publish.yaml` carries **`post_url`** (the *editor* address,
   `/publish/post/<id>`) and **`public_url`** (the reader address, `/p/<slug>`). These are
   different URLs and both are needed.
-- **The right browser, signed in as the outlet's account.** The primary Substack outlet runs in
-  the pane; every other one in Claude in Chrome, in its `chrome_browser` (`substack_account.py
-  route <outlet>`). Run its snippet there, then `check --surface pane|chrome --result '<its JSON>'`
-  (see the `publish` skill, *Confirm the ACCOUNT*). A push from the wrong browser or account edits a
-  post its session does not own, or fails halfway. Exit 5 or 4 is a stop, not a prompt to sign in
-  again; exit 7 means run the snippet again on the right page.
+- **Signed in as the outlet's account, ON THE OUTLET'S OWN PUBLICATION.** The account is the gate;
+  the surface is a preference (`substack_account.py route <outlet>` says which to reach for first —
+  the pane for the primary, a named `chrome_browser` for an outlet that has one). Run its snippet
+  **on that outlet's publication host**, then `check --surface pane|chrome --result '<its JSON>'`
+  (see the `publish` skill, *Confirm the ACCOUNT*). A push on the wrong account edits a post its
+  session does not own, or fails halfway. **Exit 5 is a stop**, not a prompt to sign in again; exit
+  7 means run the snippet again on the right page — which now includes an answer read on another
+  Substack publication, because Substack resolves the account per publication. **Exit 4 is retired:**
+  a correct account on an off-preference surface passes with a note.
 - **Every snippet re-checks the publication and the account itself.** The pane's login is shared
   and can change after `check`, so each `scan`/`fetch`/`push`/`images` and `substack_repatch`
   snippet opens with the account guard. Before reading or writing the post it requires the page to

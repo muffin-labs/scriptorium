@@ -21,6 +21,28 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **Substack routing: the account is the gate, the surface is a preference (2026-11-03).**
+  `substack_account.py` had concluded from the pane's shared cookie store that *the pane can hold
+  one Substack account, never two*, and routed every non-primary Substack outlet to Claude in
+  Chrome. **Substack resolves `profile/self` per publication** — two fetches, nothing signed in or
+  out, answered `elmuffin` on one publication and `ericgarciaphd` on the other — so the pane holds
+  both. The false premise left a piece one block behind its live post for six weeks, filed as
+  *blocked on a surface this desk does not have*.
+  - **`substack_primary:` is now a preference.** `route` reports it as one (`surface_is_preference`),
+    and a non-primary outlet with no `chrome_browser` falls back to the pane with a note instead of
+    being unrunnable (was exit 6). `primary <outlet>` no longer refuses a demotion for the same
+    reason.
+  - **`check` reads the account before the surface.** A correct account on an off-preference
+    surface is exit 0 with a note; a **wrong** account is exit 5 on either surface. **Exit 4 is
+    retired** and nothing returns it, which the suite asserts over every input.
+  - **And the tightening that came with it, which matters more:** `check` accepted an answer read
+    on *any* `*.substack.com` page, because one login cookie covers them all. The cookie does; the
+    *answer* does not. An answer must now be read on **the outlet's own publication** (exit 7
+    otherwise) — the rule `guard_js` already enforced in the same eval as the work. An outlet with
+    no recorded `*.substack.com` host still falls back to the account alone.
+  - Unchanged, and now the only thing that rule needs to say: **never sign the pane out, or into
+    another account.** The cookie store really is shared by every tab and every session.
+
 - **The publication path, fixed where a three-outlet publish broke it (2026-10-15).** Publishing
   a twenty-figure piece to a site, LinkedIn and Substack in one sitting found ten faults; these
   are the framework's share.

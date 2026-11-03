@@ -92,30 +92,44 @@ glitchy char-by-char editor typing with one paste + one footnote pass.
   never retype it; the **`window.name` carrier** below solves that, and it is surface-independent.
   Real Chrome plus the clipboard remains a working fallback, not the default. **Never switch
   transports silently: say which surface you are on.**
-- **Confirm the ACCOUNT before any write — the surface decides whose byline it is.** A Substack
-  login is one cookie for every `*.substack.com` publication, and **the built-in pane's cookie
-  store is shared by every tab and every session** (measured 2026-09-11: a cookie set in one tab
-  was present in a fresh one, and a session that never signed in found the pane signed in). So a
-  desk with two Substack accounts cannot hold both in the pane — and **never sign the pane out, or
-  into the other account**: that silently turns every concurrent session's work into the other
-  byline's. **With more than one Substack outlet, ONE is the primary** (`substack_primary:` in
-  `outlets.yaml`; Eric, 2026-09-11): the primary uses the pane for all its Substack operations, and
-  every other Substack outlet opens in **Claude in Chrome**, in the browser its `chrome_browser`
-  names. Change it with `substack_account.py primary <outlet>` — it refuses to demote an outlet that
-  has no browser to go to, and says which sign-ins the switch needs.
+- **Confirm the ACCOUNT before any write. THE ACCOUNT IS THE GATE; THE SURFACE IS A PREFERENCE**
+  (amended 2026-11-03). **Substack resolves the account PER PUBLICATION** — measured with two
+  `profile/self` fetches, nothing signed in or out: the pane answered `elmuffin` on
+  `elmuffin.substack.com` and `ericgarciaphd` on `muffinlabs.substack.com`. So **the pane holds
+  both accounts at once**; it was never one-or-the-other. The older rule here said a desk with two
+  Substack accounts *cannot hold both in the pane*, and routed every non-primary outlet to Claude
+  in Chrome. That cost `scaling-computer-vision-workflows-aws` six weeks behind its live post, and
+  a session filed the work as *blocked on a surface this desk does not have*. It was not blocked.
+
+  **What still stands, unchanged:** the pane's cookie store is shared by every tab and every
+  session (2026-09-11), so **never sign the pane out, or into another account** — that silently
+  turns every concurrent session's work into the other byline's. Signing in and out is the hazard;
+  having both is not.
+
+  **So:** `substack_primary:` in `outlets.yaml` is a **preference** — which surface to reach for
+  first, the pane for the primary and a named `chrome_browser` for an outlet that wants one of its
+  own. Nothing is refused for being on the other. What permits a write is that **the account is
+  settled by a fetch against the outlet's OWN publication host, immediately before the write, and
+  the snippet re-checks it in the same eval as the work.** Do not widen this into *any account
+  works anywhere*; that fetch is what made the MuffinLabs re-sync safe from the pane, not a table.
 
   ```
-  python3 framework/tools/substack_account.py route <outlet>   # the pane (primary), or which Chrome browser
-  #   there, on any *.substack.com page (the editor's host is fine), run the snippet it prints
+  python3 framework/tools/substack_account.py route <outlet>   # which surface to reach for FIRST
+  #   there, ON THE OUTLET'S OWN PUBLICATION (its editor host is that host), run the snippet
   python3 framework/tools/substack_account.py check <outlet> --surface pane|chrome --result '<its JSON, verbatim>'
   ```
 
-  **Exit 5 is a refusal: stop** — signed in as the wrong account. Do not compose, re-sync or click
-  anything there, and never switch the pane to fix it. **Exit 4** means you checked this outlet in
-  the wrong browser. Exit 3 is signed out (a 401/403): the author signs in. **Exit 7** means the
-  answer settles nothing — not the snippet's JSON, read on a page that is neither the outlet's nor
-  Substack's, or another HTTP status: run it again on the right page, and do not send the author to
-  sign in. Pass the snippet's answer as-is; never type a handle in.
+  **Exit 5 is a refusal: stop** — signed in as the wrong account, on whichever surface you read it.
+  Do not compose, re-sync or click anything there, and never switch the pane to fix it. Exit 3 is
+  signed out (a 401/403): the author signs in. **Exit 7** means the answer settles nothing — not
+  the snippet's JSON, another HTTP status, or **read on a publication that is not this outlet's**,
+  which now includes another Substack publication: one login cookie covers them all, but the
+  *answer* is per publication, so a handle read next door proves nothing here. Run it again on the
+  right host, and do not send the author to sign in. Pass the snippet's answer as-is; never type a
+  handle in. **Exit 4 is retired** and nothing returns it: it meant *checked on the wrong surface*,
+  and it refused a correct account because the table pointed elsewhere. The right account on an
+  off-preference surface is **exit 0 with a note** — proceed, and write from the surface you
+  checked, not the other one.
 
   **Every snippet then checks again, itself.** `check` is one moment, and another session can
   switch the pane's login right after it. So every generated Substack script (`md_to_substack`,

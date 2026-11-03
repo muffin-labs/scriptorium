@@ -4526,11 +4526,14 @@ def unit_prose(tmp):
 
 
 def unit_substack_account(tmp):
-    """substack_account.py: with several Substack outlets ONE is primary and runs in the pane; the
-    rest open in Claude in Chrome. The pane's login is one cookie store shared by every tab and
-    every session (measured 2026-09-11), so every write also proves it is on the right account —
-    from the snippet's own answer, never a handle typed in."""
-    print("\n-- substack account: one primary in the pane, the rest in Chrome --------")
+    """substack_account.py: THE ACCOUNT IS THE GATE; THE SURFACE IS A PREFERENCE (2026-11-03).
+    `substack_primary:` says which surface to reach for first and refuses nothing. Every write
+    proves it is on the right account — from the snippet's own answer, never a handle typed in,
+    and read on THE OUTLET'S OWN PUBLICATION, because Substack resolves `profile/self` per
+    publication (measured: the pane answered `elmuffin` on one and `ericgarciaphd` on the other,
+    nothing signed in or out). The pane's login is still one shared cookie store, so signing it
+    out or into another account is still forbidden."""
+    print("\n-- substack account: the account is the gate, the surface a preference ---")
     import json as _json
     import substack_account as sa
 
@@ -4557,21 +4560,44 @@ def unit_substack_account(tmp):
     cfg = w('acct-outlets.yaml', base)
     doc = sa.load(cfg)
     check("substack_account: the declared primary is the primary", sa.primary(doc) == ('bg', None))
-    check("substack_account: the primary runs in the pane; any other opens in its Chrome browser",
+    check("substack_account: the primary prefers the pane; any other prefers its Chrome browser",
           sa.route(doc, 'bg')['surface'] == 'pane' and sa.route(doc, 'ml')['surface'] == 'chrome'
           and sa.route(doc, 'ml')['chrome_browser'] == 'eric@muffinlabs.ai')
+    check("substack_account: and route says in so many words that the surface is a preference",
+          sa.route(doc, 'bg')['surface_is_preference'] is True
+          and sa.route(doc, 'ml')['surface_is_preference'] is True)
     check("substack_account: the primary, in the pane, as its account, passes",
           sa.verdict(doc, 'bg', said('elmuffin'), 'pane')[0] == 0)
     check("substack_account: a non-primary, in its browser, as its account, passes",
           sa.verdict(doc, 'ml', said('ericgarciaphd', ml), 'chrome')[0] == 0)
-    check("substack_account: any *.substack.com page answers for the account (one login cookie)",
-          sa.verdict(doc, 'bg', said('elmuffin', 'substack.com'), 'pane')[0] == 0
-          and sa.verdict(doc, 'ml', said('ericgarciaphd', 'bg.substack.com'), 'chrome')[0] == 0)
-    check("substack_account: a non-primary checked in the pane is the wrong browser (exit 4)",
-          sa.verdict(doc, 'ml', said('elmuffin'), 'pane')[0] == 4)
+    # The old rule here was "any *.substack.com page answers for the account — one login cookie
+    # covers them all". The cookie does; the ANSWER does not. profile/self is resolved PER
+    # publication, so a handle read on bg says nothing about who you are on ml (2026-11-03).
+    check("substack_account: an answer read on ANOTHER publication settles nothing (exit 7)",
+          sa.verdict(doc, 'bg', said('elmuffin', 'substack.com'), 'pane')[0] == 7
+          and sa.verdict(doc, 'ml', said('ericgarciaphd', 'bg.substack.com'), 'chrome')[0] == 7)
+    check("substack_account: and the outlet's own publication is the one that answers",
+          sa.verdict(doc, 'ml', said('ericgarciaphd', ml), 'chrome')[0] == 0)
+    # Was exit 4, "the wrong browser", returned before the answer was even read — which refused a
+    # correct account because a static table pointed elsewhere, and cost a piece six weeks.
+    check("substack_account: the right account on the OTHER surface is a pass, with a note",
+          sa.verdict(doc, 'ml', said('ericgarciaphd', ml), 'pane')[0] == 0
+          and 'PREFERENCE' in sa.verdict(doc, 'ml', said('ericgarciaphd', ml), 'pane')[1])
+    check("substack_account: exit 4 is retired — nothing returns it",
+          4 not in {sa.verdict(doc, o, r, s)[0]
+                    for o in ('bg', 'ml', 'site', 'nope')
+                    for r in (said('elmuffin'), said('elmuffin', ml), said('ericgarciaphd', ml),
+                              said(status=401), said(status=404), 'elmuffin', None)
+                    for s in ('pane', 'chrome', None)})
+    check("substack_account: the WRONG account is a refusal on either surface (exit 5)",
+          sa.verdict(doc, 'ml', said('elmuffin', ml), 'pane')[0] == 5
+          and sa.verdict(doc, 'ml', said('elmuffin', ml), 'chrome')[0] == 5)
     check("substack_account: signed in as someone else is a refusal (exit 5)",
           sa.verdict(doc, 'ml', said('elmuffin', ml), 'chrome')[0] == 5
           and sa.verdict(doc, 'bg', said('ericgarciaphd'), 'pane')[0] == 5)
+    check("substack_account: the refusal names the surface it was READ on, not the routed one",
+          'pane' in sa.verdict(doc, 'ml', said('elmuffin', ml), 'pane')[1]
+          and 'shares the pane' in sa.verdict(doc, 'ml', said('elmuffin', ml), 'pane')[1])
     check("substack_account: only a 401/403 is signed out (exit 3)",
           sa.verdict(doc, 'bg', said(status=401), 'pane')[0] == 3
           and sa.verdict(doc, 'bg', said(status=403), 'pane')[0] == 3)
@@ -4610,12 +4636,19 @@ def unit_substack_account(tmp):
     check("substack_account: several Substack outlets and no primary is refused, not guessed",
           sa.primary(two)[0] is None and sa.verdict(two, 'bg', said('elmuffin'), 'pane')[0] == 6)
     homeless = sa.load(w('acct-homeless.yaml', base.replace("    chrome_browser: eric@muffinlabs.ai\n", "")))
-    check("substack_account: a non-primary with no chrome_browser has nowhere to run (exit 6)",
-          sa.verdict(homeless, 'ml', said('ericgarciaphd', ml), 'chrome')[0] == 6)
+    # Was exit 6, "nowhere to run". The pane resolves every publication's account at once, so it
+    # has somewhere to run: there (2026-11-03).
+    check("substack_account: a non-primary with no chrome_browser falls back to the pane, not exit 6",
+          sa.route(homeless, 'ml')['surface'] == 'pane'
+          and sa.route(homeless, 'ml')['problem'] is None
+          and 'pane' in (sa.route(homeless, 'ml')['note'] or '')
+          and sa.verdict(homeless, 'ml', said('ericgarciaphd', ml), 'pane')[0] == 0)
 
-    code, _msg = sa.set_primary(cfg, 'ml')
-    check("substack_account: switching refuses to demote an outlet with no browser to go to",
-          code == 6 and sa.load(cfg).get('substack_primary') == 'bg')
+    code, msg = sa.set_primary(cfg, 'ml')
+    check("substack_account: demoting an outlet with no browser is allowed — the pane holds it",
+          code == 0 and sa.load(cfg).get('substack_primary') == 'ml'
+          and 'pane' in msg, msg)
+    sa.set_primary(cfg, 'bg')
     cfg2 = w('acct-switch.yaml', base.replace("    account_handle: elmuffin\n",
                                               "    account_handle: elmuffin\n    chrome_browser: gmail\n"))
     code, msg = sa.set_primary(cfg2, 'ml')
