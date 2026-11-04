@@ -838,7 +838,10 @@ IMAGES_JS = """(() => {
   // adds later is caught by default rather than needing this list extended.
   const TEXTY = new Set(['doc','paragraph','heading','text','hardBreak','horizontalRule','hr',
     'blockquote','bulletList','orderedList','listItem','footnote','codeBlock',
-    'footnoteAnchor']);   // footnoteAnchor is structural, not media — the footnote machinery owns it
+    'footnoteAnchor',     // footnoteAnchor is structural, not media — the footnote machinery owns it
+    'caption']);          // the text child of a captionedImage: the walk descends into the wrapper and
+                          // reaches it, and it holds no image, so it read as an unrecorded embed and
+                          // refused every captioned hero (2026-11-04, none-but-he-and-i)
   const emb = [];
   // An image WRAPPER is not an embed. `captionedImage` carries the caption and the image sits
   // in its child `image2`, so a node's OWN attrs cannot settle it -- and since captions began
@@ -861,6 +864,7 @@ IMAGES_JS = """(() => {
   };
   const visitEmbed = (n) => {
     if (!TEXTY.has(n.type.name) && !hasImageInSubtree(n)) {
+      const a = n.attrs || {};
       const id = Object.values(a).find(v => typeof v === 'string' && v.length);
       emb.push({ type: n.type.name, key: id || n.type.name, attrs: a });
     }

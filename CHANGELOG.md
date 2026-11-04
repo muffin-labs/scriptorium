@@ -21,6 +21,13 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **Fix: the recompose image gate ran on a captioned hero (2026-11-04, PATCH).** `substack_sync.py
+  images` threw `ReferenceError: a is not defined` in `visitEmbed` — the attrs variable lived only
+  in the function above it — on the first node that was neither text nor image, so the gate could
+  not run on any post with a captioned hero. Once it ran, it refused that hero's `caption` child as
+  an unrecorded embed (exit 9). `caption` joins the text-node list. Found publishing
+  `none-but-he-and-i`, where the gate then read one image and no embeds, as it should.
+
 - **Substack routing: the account is the gate, the surface is a preference (2026-11-03).**
   `substack_account.py` had concluded from the pane's shared cookie store that *the pane can hold
   one Substack account, never two*, and routed every non-primary Substack outlet to Claude in
