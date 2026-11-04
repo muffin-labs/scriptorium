@@ -62,6 +62,11 @@ app's session list then reads as a shelf of pieces instead of a row of identical
   issues (logic, structure, gaps). Both matter; label which is which.
 - Prioritize. Lead with the few changes that matter most, not an exhaustive
   line-edit, unless a full line-edit is what was asked.
+- **When the style declares `humor:`, ask each movement where the self gets the floor** — not only
+  "where is this funny?", which one line answers. A movement whose only answer is a single line is a
+  candidate for [`humor-pass`](../humor-pass/SKILL.md) at its floor depth; say so in a `calls`
+  entry rather than writing the floor yourself mid-critique. A movement at the style's gravest thing
+  is exempt, and the critique names it as such.
 - Don't grade with adjectives-as-verdict. Report what's there and what a fix
   would be; the call to accept is the user's.
 

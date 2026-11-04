@@ -128,6 +128,12 @@ app's session list then reads as a shelf of pieces instead of a row of identical
   supplied, the wink and the run-up before the big sentence — are cheaper to not write than to
   cut. Grep for them before critique; the list lives in `corrections.md` and in the voice's
   `avoid:` block.
+- **If the voice carries humor, give the self the floor while you write, not after.** A style whose
+  `config.yaml` declares `humor:` was usually tuned for it, and a rewrite is exactly when that tune
+  should reach the prose. Pick the two or three paragraphs where the self under examination is
+  already acting — taking up a remedy, keeping score, negotiating — and write them as the self
+  talking, mine first and openly hypothetical, ending plain. The rest of the gate (below) runs
+  `humor-pass` to check what you did and propose the rest.
 - **Direct address goes at the hinges.** Where the reader is forming an objection, name it and
   concede it (*You are about to say the two traditions could not have touched. I'd like to say it
   too. It's false.*). Never to instruct, never to corner.
@@ -192,6 +198,12 @@ at it, and it is theirs to make deliberately, not a side effect of a rewrite.
    calls — the close, a paragraph whose last line could read as the old thesis in miniature, a
    chronology rendered from one sentence of the author's — are **flagged for the author, not
    decided**.
+2a. **When the style declares `humor:`, run [`humor-pass`](../humor-pass/SKILL.md) after critique**
+   and before rendering: its proposals go into the same `review.json` as critique's, trial-applied on
+   a scratch copy against the gates. Default to its **floor** depth (whole paragraphs of the self
+   talking); a pass that only adds a line per section is the one the author sent back (2026-11-04).
+   And re-read every sentence a rhythm pass split, for its referent — the author caught two such
+   orphans in one rewrite.
 3. **Render the review artifact with the tool and give the author the link.** A rewrite asks
    the author to judge prose, and a `draft.md` full of `[^slug]` markers, scaffold headers and raw
    markdown is not the thing they are being asked to judge. **The format is not yours to design:**

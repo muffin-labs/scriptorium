@@ -21,6 +21,24 @@ GitHub release with the same text.
 
 ## Unreleased
 
+- **New skill: `humor-pass` (2026-11-04, MINOR).** For a style whose `config.yaml` declares
+  `humor:`. It asks one question of a draft, *where does the self get to talk?*, and answers with
+  whole paragraphs of the subject reasoning in its own vocabulary (the **floor** depth, the
+  default) or single mid-paragraph lines (the **line** depth). Every change is a `review.json`
+  finding marked where it lands, trial-applied on a scratch copy against `check_pronouns --strict`,
+  `prose_shape` and the quote and locus checkers before the page is published, and applied only on
+  the author's yes. It reads texture references by address and never quotes them, honors the
+  ledger's tender scenes and the style's gravest things, and names the two faults a rhythm pass
+  makes (an orphaned referent, a sentence-initial pronoun that a house capital reassigns). An
+  optional `humor_depth: line | floor` key in a style's config is read if present. **`draft`**
+  writes the floor in the first time and then runs the pass; **`rewrite`** gives the self the floor
+  while writing and runs the pass after critique (step 2a); **`critique`** asks each movement where
+  the self gets the floor and sends a one-line answer to the pass. **`draft`** also gains 0a:
+  re-read every sentence a shortening pass split. A desk adopts it by linking
+  `.claude/skills/humor-pass` to `framework/skills/humor-pass`. Found writing *Two Ways to Lose
+  Yourself* v4.1, where the author sent a joke-per-section pass back, took a pass of whole
+  paragraphs, and asked for the tooling to do it again.
+
 - **Fix: the recompose image gate ran on a captioned hero (2026-11-04, PATCH).** `substack_sync.py
   images` threw `ReferenceError: a is not defined` in `visitEmbed` — the attrs variable lived only
   in the function above it — on the first node that was neither text nor image, so the gate could

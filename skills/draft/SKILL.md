@@ -99,6 +99,14 @@ app's session list then reads as a shelf of pieces instead of a row of identical
   the content is the piece's own.
 - If the style and the piece's needs genuinely conflict, surface it and ask —
   don't silently override the style or the user's intent.
+- **A style that carries humor gets it written in, not added on.** When `config.yaml` declares
+  `humor:`, decide before each movement **where the self gets the floor** — the paragraph in which
+  the subject reasons in its own vocabulary, run straight — and write that paragraph that way the
+  first time. Then run [`humor-pass`](../humor-pass/SKILL.md) on what you wrote; it proposes rather
+  than edits, so the draft you offer and the proposals arrive together. (2026-11-04: a rewrite
+  written under a humor tune still read as a serious essay with a joke per section; the author asked
+  for whole paragraphs of the self talking, took all of them, and asked for the tooling to do it
+  again.)
 - Offer the draft (or the new section) for reaction. Drafts are disposable; say so.
 
 ## After a drafting session
@@ -118,6 +126,10 @@ app's session list then reads as a shelf of pieces instead of a row of identical
    2026-09-11, Eric's call, five uses swept.) **The deity sections (A, C–H) are a house convention,
    not the desk's:** the tool asks them only of a publication with `deity_conventions: true` and
    says so when it skips them; B and I hold for every text.
+0a. **After any pass that shortens or splits sentences** — to meet `prose_shape` bands, to end a
+   paragraph short — re-read every split for its referent and sweep sentence heads by hand. A split
+   orphans an *it*, and a short sentence puts a pronoun at the head where the house's capitals
+   reassign it; section A misses a named human antecedent. `humor-pass` has the two checks.
 1. Append a dated entry to `pieces/<name>/log/<current-month>.md` — what you
    drafted, decisions, open threads. Append-only, newest at the bottom.
 2. Update `pieces/<name>/README.md` — the `Stage:` and `Next move:` lines.
