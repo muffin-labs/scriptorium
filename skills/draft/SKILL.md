@@ -104,9 +104,8 @@ app's session list then reads as a shelf of pieces instead of a row of identical
   the subject reasons in its own vocabulary, run straight — and write that paragraph that way the
   first time. Then run [`humor-pass`](../humor-pass/SKILL.md) on what you wrote; it proposes rather
   than edits, so the draft you offer and the proposals arrive together. (2026-11-04: a rewrite
-  written under a humor tune still read as a serious essay with a joke per section; the author asked
-  for whole paragraphs of the self talking, took all of them, and asked for the tooling to do it
-  again.)
+  drafted under a humor tune came out grave, with one laugh in each movement. The author asked for
+  whole paragraphs of the self talking, took all of them, and asked for the tooling to do it again.)
 - Offer the draft (or the new section) for reaction. Drafts are disposable; say so.
 
 ## After a drafting session
